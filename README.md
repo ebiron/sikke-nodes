@@ -1,34 +1,34 @@
 ![enter image description here](https://github.com/sikke-official/sikke-nodes/blob/master/docs/images/sikke_client_logo.jpg)
-# Welcome to Sikke Client
+# Welcome to Sikke Node
 
 
 
-**Sikke Platform** is an ecosystem in which transfer and other transactions related to Sikke (SKK) crypto coinand other crypto currencies created in the coin platform are made; smart contracts are created and approved; and future transactions can be made.
+**Sikke Platform** is an ecosystem in which transfer and other transactions related to Sikke (SKK) crypto coinand other crypto currencies created in the Sikke Platform are made; smart contracts are created and approved; and future transactions can be made.
 
 
 ## Get Started
 
-To use the coin client system on your personal computer, 2 applications must be downloaded. One of these is the <strong>Sikke Client Server Application</strong> and the other is <strong>Sikke Client Client Application</strong> which is used to connect to this server.
-<strong>Sikke Client Server Application</strong> is a jar console based jar file. When the jar file is run, a server stands up and starts listening to requests to be sent to http://localhost:9090/  
+To use the Sikke Node on your personal computer, 2 applications must be downloaded. One of these is the <strong>Sikke Node Server</strong> and the other is <strong>Sikke Node Console</strong> which is used to connect to this server.
+<strong>Sikke Node Server</strong> is a jar console based jar file. When the jar file is run, a server stands up and starts listening to requests to be sent to http://localhost:9090/  
 
-<strong>Sikke Client Server Application</strong> is a console application designed to send requests to this server. 
+<strong>Sikke Node Server</strong> is a console application designed to send requests to this server. 
 
-<strong>Sikke Client Server Application</strong> consists of a <em><strong>single jar file of all operating systems</strong></em>, while the <strong>Sikke Client Server Application</strong> has 3 instances that you can download 
+<strong>Sikke Node Server</strong> consists of a <em><strong>single jar file of all operating systems</strong></em>, while the <strong>Sikke Node Server</strong> has 3 instances that you can download 
 according to your operating system. 
 
-<br>How to use the Sikke Client System is described in detail in the documentation below.
+<br>How to use the Sikke Node is described in detail in the documentation below.
 
-To run the Sikke Client Server, make sure you have the latest version of Java installed on your personal computer.  
+To run the Sikke Node Server, make sure you have the latest version of Java installed on your personal computer.  
 If the latest version of Java is not installed on your system, you can  download from https://www.java.com/en/download/
 and install the latest version of Java.
 To see if the server is up and running; You can request from the browser and Postman at <a  href="http://localhost:9090/serverStatus">http://localhost:9090/serverStatus</a>
 
-<p>After installing the current version of Java on your personal computer, you should run the <strong>Sikke Client Server</strong> as follows.
+<p>After installing the current version of Java on your personal computer, you should run the <strong>Sikke Node Server</strong> as follows.
 
 ![enter image description here](https://github.com/sikke-official/sikke-nodes/blob/master/docs/images/sikke_console_java_jar.PNG)
   
 
-<p>In order to request <strong>Sikke Client Server</strong> from <strong>Sikke Client Application</strong> , you must download Coin Client Client which is suitable for your operating system.</p>
+<p>In order to request <strong>Sikke Node Server</strong> from <strong>Sikke Node Console</strong> , you must download Sikke Node Console which is suitable for your operating system.</p>
 
   
 ![enter image description here](https://github.com/sikke-official/sikke-nodes/blob/master/docs/images/sikke_console_client.PNG)
@@ -38,7 +38,7 @@ To see if the server is up and running; You can request from the browser and Pos
 
 [JSON-RPC](https://en.wikipedia.org/wiki/JSON-RPC)  is a remote procedure call protocol encoded in JSON. You can use this API to access data in  [Sikke](https://www.sikke.com.tr/)  Client. The JSON-RPC API server runs on:
 
--   `http://localhost:9090/`  when running Sikke Client locally.
+-   `http://localhost:9090/`  when running Sikke Node locally.
 
 All API calls are POST requests made to Sikke API.
 
@@ -51,7 +51,7 @@ All requests follow the standard JSON-RPC format and include 4 variables in the 
 |metthod |  e.g. "GetBalance"|
 |params | e.g. ["1"] |
 
-## Sikke Client Command Functions
+## Sikke Node Command Functions
 
   
 
@@ -77,7 +77,7 @@ All requests follow the standard JSON-RPC format and include 4 variables in the 
 
 ## login  
 
->  _**login**_ function accepts two required parameters to login operation, one user username(email) and one user password. You must be logged in to make wallet transactions at the SIKKE Client.
+>  _**login**_ function accepts two required parameters to login operation, one user username(email) and one user password. You must be logged in to make wallet transactions at the Sikke Node.
 
      login (email:Value), (password:Value)
 
@@ -125,7 +125,7 @@ All requests follow the standard JSON-RPC format and include 4 variables in the 
 
 ## importWallet
    >    ***importWallet*** function receives the **SIKKE private address** . 
-   >     By importing the private key address of the existing  **SIKKE** wallet into the coin client system, a new wallet is created in this system.
+   >     By importing the private key address of the existing  **SIKKE** wallet into the Sikke Node, a new wallet is created in this system.
 
      importWallet (privateKey)
 
@@ -143,7 +143,7 @@ All requests follow the standard JSON-RPC format and include 4 variables in the 
 
 ## listWallets
    >    _***listWallets***_ function does not receive any parameters.  
-This command lists the wallets and wallet balance information in the **SIKKE** client system of the logged-in user.
+This command lists the wallets and wallet balance information in the **Sikke** Node of the logged-in user.
 
 > Example Usage(console):
 > 
@@ -198,7 +198,7 @@ This command lists the wallets and wallet balance information in the **SIKKE** c
 
    ## createWallet
    >   _**createWallet**_ function receives the optional wallet aliasName parameter.  
-The command creates a **SIKKE** wallet starting with the SKK prefix in the SIKKE client local database.
+The command creates a **SIKKE** wallet starting with the SKK prefix in the SIKKE Node local database.
 
      createWallet aliasName
 
@@ -218,7 +218,7 @@ The command creates a **SIKKE** wallet starting with the SKK prefix in the SIKKE
 
 ## createWalletAndSave
 
-_**createWalletAndSave**_ function receives the optional parameters. The command creates **SIKKE** wallet in **SIKKE** client system. The created wallet is synchronized to the coin API network. When you create your **SIKKE** wallet, you can see this wallet on all SIKKE systems(**SIKKE Web Wallet**, **SIKKE Web Wallet**, **SIKKE Client**).With the created wallet, transaction can be made in all coin systems.
+_**createWalletAndSave**_ function receives the optional parameters. The command creates **SIKKE** wallet in **SIKKE** Node. The created wallet is synchronized to the coin API network. When you create your **SIKKE** wallet, you can see this wallet on all SIKKE systems(**SIKKE Web Wallet**, **SIKKE Web Wallet**, **SIKKE Node**).With the created wallet, transaction can be made in all coin systems.
 
      createWalletAndSave ALIAS_NAME|LIMIT_HOURLY|LIMIT_DAILY|LIMIT_MAX_AMOUNT|DEFAULT : Value
 
@@ -278,7 +278,7 @@ In the other mode, only the asset type, only the wallet address, or both can be 
      > mergeBalances address:SKK17h6BPxWhJS54j5UJ1Mdf6Z2UkGG4P5n4x asset:SKK
 
    ## getBalances
-   >    _**getBalances**_ function accepts two optional parameters, one SIKKE wallet address and one asset. The command lists the balance information of the wallets found in the coin client according to the specified criteria.
+   >    _**getBalances**_ function accepts two optional parameters, one SIKKE wallet address and one asset. The command lists the balance information of the wallets found in the Sikke Node according to the specified criteria.
 
      > getBalances sikkeWalletAddress |& asset
 
@@ -334,9 +334,9 @@ The transfer specified as “hidden” appears as a hidden transaction on the ne
 
 > ***syncWallet*** has two modes. 
 > 
->In the first of these modes, if any parameters are not entered, the system user's **SIKKE CLIENT** is synchronized with all the wallets **SIKKE API** that are in the local database. 
+>In the first of these modes, if any parameters are not entered, the system user's **SIKKE Node** is synchronized with all the wallets **SIKKE API** that are in the local database. 
 >In the second of these modes, a wallet address and information created with createWallet is synchronized with the SIKKE API.
-After that, the wallet that was previously only available in the local database becomes visible on the entire SIKKE system (**SIKKE Web Wallet**, **SIKKE Mobile Wallet**, **SIKKE Client**).
+After that, the wallet that was previously only available in the local database becomes visible on the entire SIKKE system (**SIKKE Web Wallet**, **SIKKE Mobile Wallet**, **SIKKE Node**).
 > 
 > 
 
