@@ -31,7 +31,7 @@ To see if the server is up and running; You can request from the browser and Pos
 <p>In order to request <strong>Sikke Client Server</strong> from <strong>Sikke Client Application</strong> , you must download Coin Client Client which is suitable for your operating system.</p>
 
   
-![enter image description here](https://github.com/sikke-official/sikke-java-client/blob/master/SikkeConsoleClient.PNG)
+![enter image description here](https://github.com/sikke-official/sikke-nodes/blob/master/docs/images/sikke_console_client.PNG)
 
 
 ## Introduction
