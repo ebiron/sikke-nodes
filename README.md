@@ -1,4 +1,4 @@
-![enter image description here](https://github.com/sikke-official/sikke-java-client/blob/master/sikke_client_logo.jpg)
+![enter image description here](https://github.com/sikke-official/sikke-nodes/blob/master/docs/images/sikke_client_logo.jpg)
 # Welcome to Sikke Client
 
 
