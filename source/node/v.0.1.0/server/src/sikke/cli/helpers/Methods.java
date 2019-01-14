@@ -1345,7 +1345,7 @@ public class Methods {
 		String sql;
 		wallet wallet;
 		int maxSeqNum;
-		sql = "SELECT u.email, w.*, ifnull(a.maxSeqNumber, 0) maxSeqNum FROM system_user u,wallets w LEFT JOIN (SELECT t._from,max(t.seq) AS maxSeqNumber FROM tx t GROUP BY t._from) a ON w.address = a._from WHERE u.email = w.email";
+		sql = "SELECT u.email, w.*, ifnull(a.maxSeqNumber, 0) maxSeqNum FROM system_user u, wallets w LEFT JOIN( SELECT t._from, max(t.seq) AS maxSeqNumber FROM tx t GROUP BY t._from) a ON w.address = a._from WHERE u.email = w.email AND u.is_user_logged_in = 1; ";
 		Statement stmt = con.createStatement();
 		ResultSet rs = stmt.executeQuery(sql);
 		while (rs.next()) {

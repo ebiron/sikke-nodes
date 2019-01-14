@@ -28,6 +28,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Scanner;
 
+import javax.swing.filechooser.FileSystemView;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 
@@ -70,18 +72,20 @@ public class _System {
 	}
 
 	private void initFolder() throws FileNotFoundException, Exception {
+		String os = getOS("os.name");
+		if (os == null) {
+			throw new IOException("Os Name Not Found");
+		}
+		os = getOS("os.name").toLowerCase();
 
-		String os = getOS("os.name").toLowerCase();
 		String path = null;
-
-		if (os.contains("linux") && os.contains("mac os")) {
-			path = getFileSystemView().getHomeDirectory().toString() + "/.sikke";
+		if ((os.contains("linux")) || (os.contains("unix")) || (os.contains("mac os"))) {
+			path = FileSystemView.getFileSystemView().getHomeDirectory().toString() + "/.sikke";
 		} else if (os.contains("windows")) {
 			path = System.getenv("APPDATA") + "\\Sikke";
 		}
-
 		File f = new File(path);
-		if (f == null || !f.exists()) {
+		if ((f == null) || (!f.exists())) {
 			File createDir1 = new File(path);
 			createDir1.mkdir();
 			System.out.println("App folder created at > " + path);

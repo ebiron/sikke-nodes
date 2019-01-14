@@ -12,6 +12,7 @@ import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,54 +38,55 @@ public class EchoPostHandler implements HttpHandler {
 	}
 
 	@Override
-	public void handle(HttpExchange he) throws IOException {
-		try {
-			// parse request
-			Map<String, Object> parameters = new HashMap<String, Object>();
-
-			InputStreamReader isr = new InputStreamReader(he.getRequestBody(), "utf-8");
-			BufferedReader br = new BufferedReader(isr);
-			String query = br.readLine();
-			if(query != null) {
-				// parseQuery(query, parameters);
-				// System.out.println("query : " + query);
-				Headers requestHeaders = he.getRequestHeaders();
-
-				if (requestHeaders.get("Authorization") != null) {
-					System.out.println("var");
-					String Auth = requestHeaders.get("Authorization").toString();
-				} else {
-					// System.out.println("yok");
-				}
-
-				Gson gson = new GsonBuilder().setPrettyPrinting().create();
-				rpcObj rpc = gson.fromJson(query, rpcObj.class);
-				// System.out.println(query);
-				// System.out.println(rpc.id);
-
-				String response = "";
-				for (String key : parameters.keySet()) {
-					response += key + " = " + parameters.get(key) + "\n";
-				}
-				he.sendResponseHeaders(200, response.length());
-				OutputStream os = he.getResponseBody();
-
-				rpcObj a = new rpcObj();
-				a.id = rpc.id;
-				a.jsonrpc = "2.0";
-				a.method = rpc.method;
-
-				a.result = jsonrpc.Methods(rpc.method, rpc.params);
-				//System.err.println(gson.toJson(a));
-				String c = gson.toJson(a);
-
-				os.write(c.getBytes());
-				os.close();
-			}			
-		} catch (Exception ex) {
-			Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, null, ex);
-		}
-	}
+	public void handle(HttpExchange he)
+		    throws IOException
+		  {
+		    try
+		    {
+		      Map<String, Object> parameters = new HashMap();
+		      
+		      InputStreamReader isr = new InputStreamReader(he.getRequestBody(), "utf-8");
+		      BufferedReader br = new BufferedReader(isr);
+		      String query = br.readLine();
+		      if (query != null)
+		      {
+		        Headers requestHeaders = he.getRequestHeaders();
+		        if (requestHeaders.get("Authorization") != null)
+		        {
+		          System.out.println("var");
+		          String str1 = requestHeaders.get("Authorization").toString();
+		        }
+		        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+		        rpcObj rpc = (rpcObj)gson.fromJson(query, rpcObj.class);
+		        
+		        String response = "";
+		        for (String key : parameters.keySet()) {
+		          response = response + key + " = " + parameters.get(key) + "\n";
+		        }
+		        he.sendResponseHeaders(200, response.length());
+		        OutputStream os = he.getResponseBody();
+		        
+		        rpcObj a = new rpcObj();
+		        a.id = rpc.id;
+		        a.jsonrpc = "2.0";
+		        a.method = rpc.method;
+		        
+		        List<String> list = new ArrayList(Arrays.asList(rpc.params));
+		        list.removeAll(Arrays.asList(new String[] { "", null }));
+		        
+		        a.result = this.jsonrpc.Methods(rpc.method, (String[])list.toArray(new String[0]));
+		        
+		        String c = gson.toJson(a);
+		        
+		        os.write(c.getBytes());
+		        os.close();
+		      }
+		    }
+		    catch (Exception ex)
+		    {
+		      Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, null, ex);
+		    }
+		  }
 
 	public static void parseQuery(String query, Map<String, Object> parameters) throws UnsupportedEncodingException {
 

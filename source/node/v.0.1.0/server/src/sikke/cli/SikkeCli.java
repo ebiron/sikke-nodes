@@ -120,7 +120,7 @@ public class SikkeCli {
 
 					//System.out.println("> Sikke Timer Thread Invoked, the Time : " + df.format(currentDate));
 					try {
-						//new EchoPostHandler().jsonrpc.methods.syncTx();
+						new EchoPostHandler().jsonrpc.methods.syncTx();
 					} catch (Exception e) {
 						System.out.println("Error on sikke thread : " + e.getMessage());
 						e.printStackTrace();
