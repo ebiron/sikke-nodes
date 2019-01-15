@@ -24,6 +24,7 @@ import org.omg.CORBA.Request;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -51,39 +52,45 @@ public class EchoPostHandler implements HttpHandler {
 			Headers requestHeaders = he.getRequestHeaders();
 			String requestMethod = he.getRequestMethod();
 			String path = he.getRequestURI().getPath();
+			Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
-			if (!requestMethod.equals(RequestMethods.POST.getUrl())) {
-				String response = "Only POST requests are allowed via base URL";
-				he.sendResponseHeaders(404, response.length());
+			if (!path.equals("/")) {
+				Error error = new Error();
+				error.error_code = 404;
+				error.message = "Only base URL requests are allowed";
+				error.status = "error";
+				String c = gson.toJson(error);
 				OutputStream os = he.getResponseBody();
-				os.write(response.getBytes());
+				he.sendResponseHeaders(404, c.length());
+				os.write(c.getBytes());
 				os.close();
 				return;
 			}
-			if (!path.equals("/")) {
-				String response = "Couldn't find POST request. Only base URL requests are allowed";
-				he.sendResponseHeaders(404, response.length());
+			if (!requestMethod.equals(RequestMethods.POST.getUrl())) {
+				Error error = new Error();
+				error.error_code = 404;
+				error.message = "Only POST requests are allowed via base URL";
+				error.status = "error";
+				String c = gson.toJson(error);
 				OutputStream os = he.getResponseBody();
-				os.write(response.getBytes());
+				he.sendResponseHeaders(404, c.length());
+				os.write(c.getBytes());
 				os.close();
 				return;
 			}
 			if (query == null || query.isEmpty()) {
-				String response = "Only base URL requests are allowed with request body";
-				he.sendResponseHeaders(404, response.length());
+				Error error = new Error();
+				error.error_code = 404;
+				error.message = "Only base URL requests are allowed with request body";
+				error.status = "error";
+				String c = gson.toJson(error);
 				OutputStream os = he.getResponseBody();
-				os.write(response.getBytes());
+				he.sendResponseHeaders(404, c.length());
+				os.write(c.getBytes());
 				os.close();
 				return;
 			}
-
-			/*
-			 * if (requestHeaders.get("Authorization") != null) { System.out.println("var");
-			 * String str1 = requestHeaders.get("Authorization").toString(); }
-			 */
-			Gson gson = new GsonBuilder().setPrettyPrinting().create();
 			rpcObj rpc = (rpcObj) gson.fromJson(query, rpcObj.class);
-
 			String response = "";
 			for (String key : parameters.keySet()) {
 				response = response + key + " = " + parameters.get(key) + "\n";
@@ -151,4 +158,10 @@ class rpcObj {
 	JsonArray result;
 
 	String[] params;
+}
+
+class Error {
+	String status;
+	String message;
+	int error_code;
 }
