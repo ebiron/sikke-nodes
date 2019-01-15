@@ -8,5 +8,6 @@
 	<classpathentry kind="lib" path="dist/lib/core-1.58.0.0.jar"/>
 	<classpathentry kind="lib" path="dist/lib/prov-1.58.0.0.jar"/>
 	<classpathentry kind="lib" path="dist/lib/sqlite-jdbc-3.25.2.jar"/>
+	<classpathentry kind="src" path="images"/>
 	<classpathentry kind="output" path="build/classes"/>
 </classpath>

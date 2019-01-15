@@ -14,7 +14,6 @@ public class SikkeConstant {
 	public static final String createWalletUrl = "https://api.sikke.network/v1/wallet/generate_wallet";
 
 	public static final String GET_WALLET_BALANCE_URL = "/v1/wallet/balance/";
-
 	public static final String SEND_TX_URL = "https://api.sikke.network/v1/wallet/balance/";
 
 	// Status
@@ -34,10 +33,13 @@ public class SikkeConstant {
 	public static final String TX_QUERY_TYPE_ADDRESS = "address";
 	public static final String TX_QUERY_TYPE_SEQUENCE = "seq";
 	public static final String SEPERATOR = ":";
+
 	public static final String DEFAULT_ASSET = "SKK";
+	// Request Types
 	public static final String REQUEST_POST = "POST";
 	public static final String REQUEST_PUT = "PUT";
 	public static final String REQUEST_GET = "GET";
+
 	public static final int QUERY_LIMIT = 100;
 	public static final String MERGE_BALANCE_TEXT = "Merge balance operation";
 	public static final Object DOUBLE_UNDERSCORE = "__";
@@ -97,7 +99,6 @@ public class SikkeConstant {
 			while (last_string.equals("0")) {
 				amount_text = amount_text.substring(0, amount_text.length() - 1);
 				last_string = amount_text.substring(amount_text.length() - 1);
-
 			}
 			if (last_string.equals(".")) {
 				amount_text = amount_text.substring(0, amount_text.length() - 1);

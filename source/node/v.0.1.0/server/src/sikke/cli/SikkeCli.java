@@ -15,6 +15,18 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.awt.AWTException;
+import java.awt.CheckboxMenuItem;
+import java.awt.Image;
+import java.awt.Menu;
+import java.awt.MenuItem;
+import java.awt.PopupMenu;
+import java.awt.SystemTray;
+import java.awt.TrayIcon;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -31,6 +43,12 @@ import java.util.Scanner;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import javax.swing.ImageIcon;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
+
 import static javax.swing.filechooser.FileSystemView.getFileSystemView;
 import sikke.cli.defs.User;
 import sikke.cli.helpers.Helpers;
@@ -46,25 +64,11 @@ public class SikkeCli {
 	public static Helpers helper = new Helpers();
 	public static _System system = new _System();
 
-	public static void createNewDatabase(String fileName) {
-		String url = "jdbc:sqlite:" + fileName;
-		try (Connection conn = DriverManager.getConnection(url)) {
-			if (conn != null) {
-				DatabaseMetaData meta = conn.getMetaData();
-				System.out.println("The driver name is " + meta.getDriverName());
-				System.out.println("A new database has been created.");
-			}
-		} catch (SQLException e) {
-			System.out.println(e.getMessage());
-		}
-	}
-
 	public static void main(String[] args) throws IOException, Exception, FileNotFoundException {
 		List<User> userList = new ArrayList<>();
 		system.initApp();
 		String error = "";
 
-		//final EchoPostHandler echoPostHandler = new EchoPostHandler();
 		try {
 			system.getActiveUsers(null, userList);
 			if (userList.size() == 1) {
@@ -72,9 +76,9 @@ public class SikkeCli {
 			} else {
 				system.shouldThreadContinueToWork = false;
 			}
-
 			int port = Integer.parseInt(system.getConf("rpcport")) > 999 ? Integer.parseInt(system.getConf("rpcport"))
 					: -1;
+			system.port = port;
 			String sikkeServer = system.getConf("server");
 			String rpcUser = system.getConf("rpcuser");
 			String rpcPw = system.getConf("rpcpassword");
@@ -87,16 +91,13 @@ public class SikkeCli {
 			if (error.isEmpty()) {
 				HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 				System.out.println("> Sikke server started at port number: " + port);
-
+			
 				server.createContext("/serverStatus", new RootHandler());
-				server.createContext("/newTransaction", new EchoTransactionHandler());
-				server.createContext("/", new EchoPostHandler());
-				// server.createContext("/echoHeader", new EchoHeaderHandler());
-				// server.createContext("/echoGet", new EchoGetHandler());
-				// server.createContext("/echoPost", echoPostHandler);
-
+		server.createContext("/newTransaction", new EchoTransactionHandler());
+				server.createContext("/", new EchoPostHandler());				
 				server.setExecutor(null);
 				server.start();
+				initSystemTray();
 			} else {
 				System.err.println(error + "Please check your conf file > " + system.getPath() + "sikke.conf");
 			}
@@ -109,7 +110,7 @@ public class SikkeCli {
 
 		final Timer timer = new Timer();
 		long delay = SikkeConstant.THREAD_DELAY;
-		long intervalPeriod = SikkeConstant.INTERVAL_PERIOD; // schedules the task to be run in an interval
+		long intervalPeriod = SikkeConstant.INTERVAL_PERIOD;
 		TimerTask task = new TimerTask() {
 			@Override
 			public void run() {
@@ -118,7 +119,8 @@ public class SikkeCli {
 					Date currentDate = new Date(currentDateTime);
 					DateFormat df = new SimpleDateFormat("dd.MM.yy-HH:mm:ss");
 
-					//System.out.println("> Sikke Timer Thread Invoked, the Time : " + df.format(currentDate));
+					// System.out.println("> Sikke Timer Thread Invoked, the Time : " +
+					// df.format(currentDate));
 					try {
 						new EchoPostHandler().jsonrpc.methods.syncTx();
 					} catch (Exception e) {
@@ -130,20 +132,124 @@ public class SikkeCli {
 		};
 		timer.scheduleAtFixedRate(task, delay, intervalPeriod);
 	}
-}
 
-class test {
+	private static void initSystemTray() {
+		try {
+			UIManager.setLookAndFeel("com.sun.java.swing.plaf.windows.WindowsLookAndFeel");
+			// UIManager.setLookAndFeel("javax.swing.plaf.metal.MetalLookAndFeel");
+		} catch (UnsupportedLookAndFeelException ex) {
+			ex.printStackTrace();
+		} catch (IllegalAccessException ex) {
+			ex.printStackTrace();
+		} catch (InstantiationException ex) {
+			ex.printStackTrace();
+		} catch (ClassNotFoundException ex) {
+			ex.printStackTrace();
+		}
+		UIManager.put("swing.boldMetal", Boolean.FALSE);
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				createAndShowGUI();
+			}
+		});
+	}
 
-	String status;
-	String wallet;
-}
+	private static void createAndShowGUI() {
 
-class Bean {
-	String status;
-	Body wallet;
-}
+		if (SystemTray.isSupported()) {
+			final PopupMenu popup = new PopupMenu();
+			final TrayIcon trayIcon = new TrayIcon(createImage("/sikke24.gif", "Sikke Node "));
+			trayIcon.setImageAutoSize(true);
+			final SystemTray tray = SystemTray.getSystemTray();
 
-class Body {
-	String address;
+			// Create a popup menu components
+			MenuItem aboutItem = new MenuItem("About");
+			Menu displayMenu = new Menu("Display");
+			MenuItem infoItem = new MenuItem("Info");
+			MenuItem noneItem = new MenuItem("None");
+			MenuItem exitItem = new MenuItem("Exit Sikke Node Server");
 
+			// Add components to popup menu
+			popup.add(aboutItem);
+			popup.addSeparator();
+			popup.add(displayMenu);
+			displayMenu.add(infoItem);
+			displayMenu.add(noneItem);
+			popup.add(exitItem);
+
+			trayIcon.setPopupMenu(popup);
+
+			try {
+				tray.add(trayIcon);
+			} catch (AWTException e) {
+				System.out.println("Sikke Node Icon could not be added.");
+				return;
+			}
+
+			trayIcon.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					JOptionPane.showMessageDialog(null,
+							"Server started successfully. The server works on port number:" + new _System().port);
+				}
+			});
+
+			aboutItem.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					JOptionPane.showMessageDialog(null,
+							"Server started successfully. The server works on port number:" + new _System().port);
+				}
+			});
+
+			ActionListener listener = new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					MenuItem item = (MenuItem) e.getSource();
+
+					System.out.println(item.getLabel());
+					if ("Error".equals(item.getLabel())) {
+
+						trayIcon.displayMessage("Sikke Node Server", "This is an error message",
+								TrayIcon.MessageType.ERROR);
+
+					} else if ("Warning".equals(item.getLabel())) {
+
+						trayIcon.displayMessage("Sikke Node Server", "This is a warning message",
+								TrayIcon.MessageType.WARNING);
+
+					} else if ("Info".equals(item.getLabel())) {
+
+						trayIcon.displayMessage("Sikke Node Server", "This is an info message",
+								TrayIcon.MessageType.INFO);
+
+					} else if ("None".equals(item.getLabel())) {
+
+						trayIcon.displayMessage("Sikke Node Server", "This is an ordinary message",
+								TrayIcon.MessageType.NONE);
+					}
+				}
+			};
+			trayIcon.displayMessage("Sikke Node Server",
+					"Sikke Node Server started successfully on port : " + new _System().port,
+					TrayIcon.MessageType.INFO);
+
+			infoItem.addActionListener(listener);
+			noneItem.addActionListener(listener);
+			exitItem.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					tray.remove(trayIcon);
+					System.exit(0);
+				}
+			});
+		}
+	}
+
+	protected static Image createImage(String path, String description) {
+		URL imageURL = SikkeCli.class.getResource(path);
+
+		if (imageURL == null) {
+			System.err.println("Resource not found: " + path);
+			return null;
+		} else {
+			return (new ImageIcon(imageURL, description)).getImage();
+		}
+	}
 }

@@ -80,6 +80,7 @@ class JSONRPC {
 			break;
 		default:
 			result = "Invalid method!";
+			rs = new JsonArray();
 			rs.add(result);
 			break;
 		}

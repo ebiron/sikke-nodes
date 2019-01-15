@@ -50,7 +50,7 @@ import sikke.cli.wallet.WalletKey;
 
 /**
  *
- * @author selim
+ * @author mumbucoglu
  */
 public class Methods {
 
@@ -59,7 +59,7 @@ public class Methods {
 	static boolean isWalletCreated = false;
 
 	private Connection connect() {
-		// SQLite connection string
+
 		String url = system.getDB();
 		Connection conn = null;
 		try {
@@ -476,9 +476,9 @@ public class Methods {
 						.append(publicKey).append("&tx_nonce=").append(nonce).append("&is_hidden=").append(hidden);
 
 				String response = helper.sendPost("/v1/tx", sbPostQuery.toString(), null);
-				//System.err.println(response);
+				// System.err.println(response);
 				TxResponse txResponse = g.fromJson(response.toString(), TxResponse.class);
-				//System.out.println(txResponse);
+				// System.out.println(txResponse);
 				if (txResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
 					tx tx = txResponse.tx;
 					if (new Long(nonce) == Long.parseLong(tx.nonce)) {
@@ -572,7 +572,7 @@ public class Methods {
 				ResultSet rs = stmt.executeQuery(sql);
 				if (rs.next()) {
 					error = "The wallet you want to import already exists";
-					//System.out.println(error);
+					// System.out.println(error);
 					result.add(error);
 					rs.close();
 				} else {
@@ -641,7 +641,7 @@ public class Methods {
 					result.add(error);
 				} else {
 					error = "The wallet you want to make default is not found.";
-					//System.out.println(error);
+					// System.out.println(error);
 					result.add(error);
 				}
 			}
@@ -735,7 +735,7 @@ public class Methods {
 			byte[] u_password = AES256Cipher.key128Bit(plainText);
 			String encryptedPvtKey = AES256Cipher.encryptPvt(u_password, privateKey);
 
-			//System.out.println("encryptedPvtKey : " + encryptedPvtKey);
+			// System.out.println("encryptedPvtKey : " + encryptedPvtKey);
 
 			String decryptedPAssword = AES256Cipher.decryptPvt(u_password, encryptedPvtKey);
 
@@ -758,7 +758,7 @@ public class Methods {
 				sb.append("&w_limit_max_amount=" + String.valueOf(limitMaxAmount));
 			}
 			String response = helper.sendPost("/v1/wallet", sb.toString(), SikkeConstant.REQUEST_PUT);
-			//System.err.println(response);
+			// System.err.println(response);
 			WalletResponse walletResponse = g.fromJson(response.toString(), WalletResponse.class);
 
 			if (walletResponse != null) {
@@ -983,7 +983,7 @@ public class Methods {
 
 		sb.append("\n--" + String.format("%1$-15s %2$10s", "makeDefault", " : ((address))"));
 
-		//System.out.println(sb.toString());
+		// System.out.println(sb.toString());
 
 		jsonArray.add(SikkeConstant.centerString(" "));
 		jsonArray.add(SikkeConstant.centerString("...::: Sikke Client Help Menu :::..."));
@@ -1013,7 +1013,8 @@ public class Methods {
 		jsonArray.add(SikkeConstant.centerString(" "));
 		jsonArray.add(SikkeConstant.centerString(" "));
 		jsonArray.add(SikkeConstant.centerString(" "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "Sikke Client System Github", ": https://github.com/sikke-official/sikke-java-client "));
+		jsonArray.add(String.format("%1$-25s %2$20s", "Sikke Client System Github",
+				": https://github.com/sikke-official/sikke-java-client "));
 		return jsonArray;
 	}
 
@@ -1046,7 +1047,6 @@ public class Methods {
 						String[] criterias = replaceSpaceAndSplit(param);
 						String key = criterias[0].toLowerCase();
 						String value = criterias[1];
-
 						if (key.equals(SikkeConstant.ADDRESS)) {
 							sql += " and w.address='" + value + "'";
 						} else if (key.equals(SikkeConstant.TEXT_ASSET)) {
@@ -1110,7 +1110,7 @@ public class Methods {
 						.append("&tx_nonce=").append(String.valueOf(nonce)).append("&is_hidden=0");
 
 				response = helper.sendPost("/v1/tx", sbPostQuery.toString(), null);
-				//System.err.println(response);
+				// System.err.println(response);
 				TxResponse txResponse = g.fromJson(response.toString(), TxResponse.class);
 				if (txResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
 					insertTx(conn, txResponse.tx);
@@ -1217,7 +1217,7 @@ public class Methods {
 							.append(String.valueOf(limit)).append("&skip=").append(String.valueOf(skip))
 							.append("&sort=asc");
 					String response = helper.sendGet("/v1/tx?", sbTx.toString());
-					//System.err.println(response);
+					// System.err.println(response);
 
 					JsonObject json = (JsonObject) new JsonParser().parse(response);
 					JsonArray jsonArray = (JsonArray) json.get("tx_items");
@@ -1298,7 +1298,7 @@ public class Methods {
 							.append("&skip=").append(String.valueOf(skip)).append("&sort=asc");
 
 					String response = helper.sendGet("/v1/tx?", sbTx.toString());
-				//	System.err.println(response);
+					// System.err.println(response);
 					JsonObject json = (JsonObject) new JsonParser().parse(response);
 					JsonArray jsonArray = (JsonArray) json.get("tx_items");
 
@@ -1654,8 +1654,8 @@ public class Methods {
 				numberOfWallet++;
 			}
 			String path = new File(".").getCanonicalPath() + File.separator;
-			String file = path + SikkeConstant.FILE_NAME;	
-			fileWriter = new FileWriter(file);			
+			String file = path + SikkeConstant.FILE_NAME;
+			fileWriter = new FileWriter(file);
 			fileWriter.write(jsonObject.toString());
 			result.add(numberOfWallet
 					+ " wallets have been exported. Your exported wallets are written to the file \"wallets.skk\" at "
@@ -1711,6 +1711,7 @@ public class Methods {
 					}
 					result.add(walletList.size()
 							+ " wallets were successfully imported from the \"wallets.skk\" file at " + path);
+					isWalletCreated = true;
 				} else {
 					result.add("No wallet to import in file. Please check the file and try again.");
 				}

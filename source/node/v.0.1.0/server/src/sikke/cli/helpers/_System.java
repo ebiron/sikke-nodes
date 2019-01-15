@@ -49,6 +49,7 @@ public class _System {
 	public static Helpers helper = new Helpers();
 	public static _System system = new _System();
 	static public boolean shouldThreadContinueToWork = true;
+	static public int port = 0;
 
 	public void initApp() throws FileNotFoundException, UnsupportedEncodingException, Exception {
 		initFolder();
@@ -60,7 +61,6 @@ public class _System {
 	}
 
 	public Connection connect() {
-		// SQLite connection string
 		String url = system.getDB();
 		Connection conn = null;
 		try {
@@ -131,94 +131,6 @@ public class _System {
 				}
 			}
 		}
-	}
-
-	protected User initUser() throws Exception {
-		Connection conn = null;
-		String sql = null;
-		List<User> userList = new ArrayList<>();
-		User user = null;
-		User userFromService = null;
-		Gson g = new Gson();
-		try {
-			conn = this.connect();
-			getActiveUsers(conn, userList);
-			if (userList.size() == 0) {
-				// Login e yönlendir
-				System.out.print("Sikke User Email : ");
-				String email = new Scanner(System.in).nextLine();
-				System.out.print("Password : ");
-				String password = new Scanner(System.in).nextLine();
-				String response = getAccessToken(email, password);
-				user = g.fromJson(response.toString(), User.class);
-				if (user.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-
-					byte[] pin_byte = AES256Cipher.getRandomAesCryptKey();
-					byte[] iv_byte = AES256Cipher.getRandomAesCryptIv();
-					userFromService.crypt_key = AppHelper.toHexString(pin_byte);
-					user.crypt_iv = AppHelper.toHexString(iv_byte);
-					user.encrypted_password = AES256Cipher.encrypt(pin_byte, iv_byte, password);
-					user.is_user_logged_in = true;
-					saveOrUpdateUser(conn, user);
-				}
-			} else if (userList.size() == 1) {
-				// Aktif kullanýcý var ama API ye sor
-				user = userList.get(0);
-				String response = getAccessToken(user.email, user.getPassword());
-				userFromService = g.fromJson(response.toString(), User.class);
-				if (userFromService.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-					user.access_token = userFromService.access_token;
-					user.refresh_token = userFromService.refresh_token;
-					saveOrUpdateUser(conn, user);
-				}
-			} else if (userList.size() > 1) {
-				// Birden çok aktif kullanýcý var tüm kullanýcýlarýn login durumunu 0 a çek
-				// logine yönlendir.
-				disableAllUserLoginStatus(conn);
-				System.out.print("Sikke User Email : ");
-				String email = new Scanner(System.in).nextLine();
-				System.out.print("Password : ");
-				String password = new Scanner(System.in).nextLine();
-				String response = getAccessToken(email, password);
-				userFromService = g.fromJson(response.toString(), User.class);
-
-				if (userFromService.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-					for (User user2 : userList) {
-						if (user2.user_id.equals(userFromService.user_id)) {
-							user2.access_token = userFromService.access_token;
-							user2.refresh_token = userFromService.refresh_token;
-							user = user2;
-							break;
-						}
-					}
-					if (user != null) {
-						user.is_user_logged_in = true;
-						saveOrUpdateUser(conn, user);
-					} else {
-						byte[] pin_byte = AES256Cipher.getRandomAesCryptKey();
-						byte[] iv_byte = AES256Cipher.getRandomAesCryptIv();
-						user.crypt_key = AppHelper.toHexString(pin_byte);
-						user.crypt_iv = AppHelper.toHexString(iv_byte);
-						user.encrypted_password = AES256Cipher.encrypt(pin_byte, iv_byte, password);
-						user.is_user_logged_in = true;
-						saveOrUpdateUser(conn, user);
-					}
-				}
-			}
-		} catch (Exception e) {
-			/*
-			 * System.err.println(""); File dir = new File(getPath()); File[] listFiles =
-			 * dir.listFiles(); for (File file : listFiles) { file.delete(); } dir.delete();
-			 */
-
-			throw new Exception(e);
-		} finally {
-			if (conn != null) {
-				conn.close();
-			}
-		}
-
-		return user;
 	}
 
 	public void disableAllUserLoginStatus(Connection conn) throws Exception {

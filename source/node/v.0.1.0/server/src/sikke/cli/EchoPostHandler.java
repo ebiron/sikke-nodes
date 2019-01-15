@@ -19,12 +19,16 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.omg.CORBA.Request;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+
+import sikke.cli.helpers._System;
 
 /**
  *
@@ -38,55 +42,71 @@ public class EchoPostHandler implements HttpHandler {
 	}
 
 	@Override
-	public void handle(HttpExchange he)
-		    throws IOException
-		  {
-		    try
-		    {
-		      Map<String, Object> parameters = new HashMap();
-		      
-		      InputStreamReader isr = new InputStreamReader(he.getRequestBody(), "utf-8");
-		      BufferedReader br = new BufferedReader(isr);
-		      String query = br.readLine();
-		      if (query != null)
-		      {
-		        Headers requestHeaders = he.getRequestHeaders();
-		        if (requestHeaders.get("Authorization") != null)
-		        {
-		          System.out.println("var");
-		          String str1 = requestHeaders.get("Authorization").toString();
-		        }
-		        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-		        rpcObj rpc = (rpcObj)gson.fromJson(query, rpcObj.class);
-		        
-		        String response = "";
-		        for (String key : parameters.keySet()) {
-		          response = response + key + " = " + parameters.get(key) + "\n";
-		        }
-		        he.sendResponseHeaders(200, response.length());
-		        OutputStream os = he.getResponseBody();
-		        
-		        rpcObj a = new rpcObj();
-		        a.id = rpc.id;
-		        a.jsonrpc = "2.0";
-		        a.method = rpc.method;
-		        
-		        List<String> list = new ArrayList(Arrays.asList(rpc.params));
-		        list.removeAll(Arrays.asList(new String[] { "", null }));
-		        
-		        a.result = this.jsonrpc.Methods(rpc.method, (String[])list.toArray(new String[0]));
-		        
-		        String c = gson.toJson(a);
-		        
-		        os.write(c.getBytes());
-		        os.close();
-		      }
-		    }
-		    catch (Exception ex)
-		    {
-		      Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, null, ex);
-		    }
-		  }
+	public void handle(HttpExchange he) throws IOException {
+		try {
+			Map<String, Object> parameters = new HashMap();
+			InputStreamReader isr = new InputStreamReader(he.getRequestBody(), "utf-8");
+			BufferedReader br = new BufferedReader(isr);
+			String query = br.readLine();
+			Headers requestHeaders = he.getRequestHeaders();
+			String requestMethod = he.getRequestMethod();
+			String path = he.getRequestURI().getPath();
+
+			if (!requestMethod.equals(RequestMethods.POST.getUrl())) {
+				String response = "Only POST requests are allowed via base URL";
+				he.sendResponseHeaders(404, response.length());
+				OutputStream os = he.getResponseBody();
+				os.write(response.getBytes());
+				os.close();
+				return;
+			}
+			if (!path.equals("/")) {
+				String response = "Couldn't find POST request. Only base URL requests are allowed";
+				he.sendResponseHeaders(404, response.length());
+				OutputStream os = he.getResponseBody();
+				os.write(response.getBytes());
+				os.close();
+				return;
+			}
+			if (query == null || query.isEmpty()) {
+				String response = "Only base URL requests are allowed with request body";
+				he.sendResponseHeaders(404, response.length());
+				OutputStream os = he.getResponseBody();
+				os.write(response.getBytes());
+				os.close();
+				return;
+			}
+
+			/*
+			 * if (requestHeaders.get("Authorization") != null) { System.out.println("var");
+			 * String str1 = requestHeaders.get("Authorization").toString(); }
+			 */
+			Gson gson = new GsonBuilder().setPrettyPrinting().create();
+			rpcObj rpc = (rpcObj) gson.fromJson(query, rpcObj.class);
+
+			String response = "";
+			for (String key : parameters.keySet()) {
+				response = response + key + " = " + parameters.get(key) + "\n";
+			}
+			he.sendResponseHeaders(200, response.length());
+			OutputStream os = he.getResponseBody();
+
+			rpcObj a = new rpcObj();
+			a.id = rpc.id;
+			a.jsonrpc = "2.0";
+			a.method = rpc.method;
+
+			List<String> list = new ArrayList(Arrays.asList(rpc.params));
+			list.removeAll(Arrays.asList(new String[] { "", null }));
+
+			a.result = this.jsonrpc.Methods(rpc.method, (String[]) list.toArray(new String[0]));
+			String c = gson.toJson(a);
+			os.write(c.getBytes());
+			os.close();
+		} catch (Exception ex) {
+			Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, null, ex);
+		}
+	}
 
 	public static void parseQuery(String query, Map<String, Object> parameters) throws UnsupportedEncodingException {
 

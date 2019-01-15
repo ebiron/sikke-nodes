@@ -9,7 +9,7 @@ module.exports = {
   createWalletAndSave: 'createWalletAndSave',
   listWallets: 'listWallets', 
   syncWallet: 'syncWallet',
-  getTransactions: 'getTransactions', 
+  getHistories: 'getHistories', 
   mergeBalances: 'mergeBalances', 
   exportWallets: 'exportWallets',
   importWallets: 'importWallets',

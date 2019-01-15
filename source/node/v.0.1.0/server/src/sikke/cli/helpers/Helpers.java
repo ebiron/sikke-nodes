@@ -55,7 +55,6 @@ public class Helpers {
 
 	public Boolean createTable(String sql) {
 		_System system = new _System();
-
 		String dbUrl = system.getDB();
 		try (Connection conn = DriverManager.getConnection(dbUrl); Statement stmt = conn.createStatement()) {
 			stmt.execute(sql);
