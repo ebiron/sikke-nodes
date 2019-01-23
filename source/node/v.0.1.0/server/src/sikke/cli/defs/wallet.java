@@ -7,18 +7,22 @@ package sikke.cli.defs;
 
 /**
  *
- * @author selim
+ * @author mumbucoglu
  */
 public class wallet {
     public String address;
     public String publicKey;
     public String privateKey;
     public String alias_name;
+    public String callback_url;
+    public String contract_token;
+    public String w_zeugma;
+    public int notification;
     public String asset;
     public double balance;
-    public double limit_daily;
-    public double limit_hourly;
-    public double limit_max_amount;
+    public Double limit_daily;
+    public Double limit_hourly;
+    public Double limit_max_amount;
     public int status;
     public int type;
     //public String insert_date; 

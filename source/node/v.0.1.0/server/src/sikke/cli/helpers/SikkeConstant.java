@@ -3,18 +3,18 @@ package sikke.cli.helpers;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class SikkeConstant {
 
 	// Urls
-	public static final String accessTokenUrl = "https://api.sikke.network/v1/oauth/token";
-	public static final String refreshTokenUrl = "https://api.sikke.network/v1/oauth/refresh_token";
-	public static final String registerUserUrl = "https://api.sikke.network/v1/auth/signup";
-	public static final String queryBalanceUrl = "https://api.sikke.network/v1/wallet/all_asset_balance/";
-	public static final String createWalletUrl = "https://api.sikke.network/v1/wallet/generate_wallet";
-
 	public static final String GET_WALLET_BALANCE_URL = "/v1/wallet/balance/";
-	public static final String SEND_TX_URL = "https://api.sikke.network/v1/wallet/balance/";
+	public static final String GET_TX = "/v1/tx";
+	public static final String SEND_TX = "/v1/tx";
+	public static final String SIGNUP = "/v1/auth/signup";
+	public static final String USER_WALLETS = "/v1/wallet/user_wallets";
 
 	// Status
 	public static final String STATUS_SUCCESS = "success";
@@ -50,6 +50,7 @@ public class SikkeConstant {
 	public static final String LIMIT_HOURLY = "limit_hourly";
 	public static final String LIMIT_DAILY = "limit_daily";
 	public static final String LIMIT_MAX_AMOUNT = "limit_max_amount";
+	public static final String CALLBACK_URL = "callback_url";
 	public static final String DEFAULT = "DEFAULT";
 
 	public final static String USER_COULD_NOT_FOUND = "No such user was found in the system. Please check your login and try again. If you do not have an account, register with the system.";
@@ -59,6 +60,9 @@ public class SikkeConstant {
 	public static final String ANOTHER_USER_HAVE_ALREADY_LOGGED_IN = "Another user have already logged in. To continue with your acccount you must logout";
 	public static final String INCORRECT_PARAMETER_SET = "Insufficient parameter set. email and password is required. Please check login information and try again.";
 	public static final String WALLET_NOT_CREATED = "Wallet could not created.";
+	public static final String YOU_HAVE_SUCCESSFULLY_REGISTERED_YOU_MUST_BE_LOGGED_IN_TO_USE_THE_SYSTEM = "You have successfully registered. You must be logged in to use the system.";
+	public static final String PASSWORD_CANNOT_BE_EMPTY = "Password cannot be empty.";
+	public static final String USERNAME_CANNOT_BE_EMPTY = "Username cannot be empty.";
 
 	public static final String TEXT_FROM = "from";
 	public static final String TEXT_TO = "to";
@@ -70,11 +74,28 @@ public class SikkeConstant {
 	public static final String USERNAME = "username";
 	public static final String PASSWORD = "password";
 	public static final String EMAIL = "email";
-	public static final String PASSWORD_COULD_NOT_FOUND = "password is required. Please check the login information and try again.";
+	public static final String PASSWORD_COULD_NOT_FOUND = "Password is required. Please check the login information and try again.";
 	public static final String DEFAULT_WALLET = "Default Wallet";
 	public static final String LOGGED_IN_USER_NOT_FOUND = "Logged in user not found. You need to be logged in to make a transaction.Please use the help menu for help.";
-	public static final String USER_REQUIRED = "email is required. Please check the login information and try again.";
+	public static final String USER_REQUIRED = "Email is required. Please check the login information and try again.";
 	public static final String FILE_NAME = "wallets.skk";
+
+	public static final String TX_PARAMS_SKIP = "skip";
+	public static final String TX_PARAMS_LIMIT = "limit";
+	public static final String TX_PARAMS_WALLET = "wallet";
+	public static final String TX_PARAMS_ASSET = "asset";
+	public static final String TX_PARAMS_TYPE = "type";
+	public static final String TX_PARAMS_SUBTYPE = "subtype";
+	public static final String TX_PARAMS_STATUS = "status";
+	public static final String TX_PARAMS_SORT = "sort";
+	public static final String TX_PARAMS_SEQ_GT = "seq_gt";
+	public static final String TX_PARAMS_WALLETS = "wallets";
+	public static final String TX_PARAMS_PUBLIC_KEY = "public_key";
+	public static final String TX_PARAMS_FROM_DATE = "from_date";
+	public static final String TX_PARAMS_TO_DATE = "to_date";
+	public static final String TX_PARAMS_USER_ID = "user_id";
+	public static final String TX_PARAMS_SEQ = "seq";
+	public static final String TX_PARAMS_GROUP = "group";
 
 	public static java.sql.Date getCurrentDate() {
 		java.util.Date today = new java.util.Date();
@@ -111,9 +132,24 @@ public class SikkeConstant {
 
 		DecimalFormatSymbols otherSymbols = new DecimalFormatSymbols();
 		otherSymbols.setDecimalSeparator('.');
-		DecimalFormat df = new DecimalFormat("#########.##", otherSymbols);
+		DecimalFormat df = new DecimalFormat("#########.###", otherSymbols);
 		df.setRoundingMode(RoundingMode.DOWN);
 		return df.format(number);
 	}
+
+	public static long stringDateToEpochTime(String str) {
+
+		SimpleDateFormat df = new SimpleDateFormat("yyyyMMddHHmm");
+		Date date = null;
+		try {
+			date = df.parse(str);
+			return date.getTime() / 1000;
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		return 0;
+	}
+
+	static final String YOU_HAVE_ALREADY_REGISTERED_YOU_MUST_LOGIN_TO_OPERATE_YOUR_WALLET_OPERATION = "You have already registered. You must login to operate your wallet operation.";
 
 }

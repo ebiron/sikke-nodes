@@ -1,8 +1,4 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+
 package sikke.cli.helpers;
 
 import static sikke.cli.helpers._System.helper;
@@ -11,36 +7,35 @@ import static sikke.cli.helpers._System.system;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.net.URLEncoder;
 import java.security.PrivateKey;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 
-import javafx.scene.input.ScrollEvent.VerticalTextScrollUnits;
 import sikke.cli.defs.TxResponse;
 import sikke.cli.defs.User;
 import sikke.cli.defs.UserResponse;
 import sikke.cli.defs.WalletFromFile;
 import sikke.cli.defs.WalletResponse;
-import sikke.cli.defs.sikkeApi;
 import sikke.cli.defs.tx;
 import sikke.cli.defs.wallet;
 import sikke.cli.wallet.AES256Cipher;
@@ -55,31 +50,14 @@ import sikke.cli.wallet.WalletKey;
 public class Methods {
 
 	Gson gson = new GsonBuilder().setPrettyPrinting().create();
-	HashMap<wallet, Integer> hmap = null;
-	static boolean isWalletCreated = false;
-
-	private Connection connect() {
-
-		String url = system.getDB();
-		Connection conn = null;
-		try {
-			// Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection(url);
-		} catch (SQLException e) {
-			e.printStackTrace();
-			System.out.println(e.getMessage());
-		}
-		return conn;
-	}
 
 	public JsonArray getHistories(String[] params) throws Exception {
-		String error = "";
 		String whereClause = "";
 		JsonArray result = new JsonArray();
 		Connection conn = null;
 		String sql = null;
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			if (getOnlyActiveUser(result, conn) == null) {
 				return result;
 			}
@@ -110,8 +88,6 @@ public class Methods {
 
 			Statement stmt = conn.createStatement();
 			ResultSet rs = stmt.executeQuery(sql);
-			int i = 0;
-
 			while (rs.next()) {
 				JsonObject jo = new JsonObject();
 				jo.addProperty("_id", rs.getString("_id"));
@@ -134,7 +110,6 @@ public class Methods {
 				jo.addProperty("type", rs.getInt("type"));
 				jo.addProperty("wallet", rs.getString("_from"));
 				result.add(jo);
-				i++;
 			}
 
 		} catch (SQLException e) {
@@ -145,8 +120,6 @@ public class Methods {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
 			throw new Exception(e);
-		} finally {
-			DBClose(conn);
 		}
 		JsonObject tx = new JsonObject();
 		tx.add("", result.getAsJsonArray());
@@ -168,15 +141,39 @@ public class Methods {
 		return user;
 	}
 
+	public User getUserByEmail(String email, Connection conn) throws Exception {
+		String sql = null;
+		User user = null;
+		try {
+			if (conn == null) {
+				conn = Connect.getConnect();
+			}
+			sql = "select * from system_user u where u.email='" + email + "';";
+			Statement stmt = conn.createStatement();
+			ResultSet rs = stmt.executeQuery(sql);
+			if (rs.next()) {
+				user = new User();
+				user.email = rs.getString("email");
+				user.user_id = rs.getString("user_id");
+				user.access_token = rs.getString("access_token");
+				user.is_user_logged_in = rs.getBoolean("is_user_logged_in");
+				user.email = rs.getString("email");
+			}
+		} catch (Exception e) {
+			throw new Exception(e);
+		}
+		return user;
+	}
+
 	public JsonArray listWallets(String[] params) throws Exception {
 		JsonArray result = new JsonArray();
 		Connection conn = null;
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			if (getOnlyActiveUser(result, conn) == null) {
 				return result;
 			}
-			String sql = "SELECT w.*, ifnull(a.asset, 'SKK') asset, ifnull(a.balance, 0) balance FROM system_user u, wallets w LEFT JOIN( SELECT t._from, t.asset, round(ifnull(sum(t.amount), 0), 8) AS balance FROM wallets w, tx t WHERE w.address = t._from GROUP BY t._from, t.asset) a ON w.address = a._from WHERE u.email = w.email AND u.is_user_logged_in = 1;  ";
+			String sql = "SELECT w.*, ifnull(a.asset, 'SKK') asset, ifnull(a.balance, 0) balance FROM system_user u, wallets w LEFT JOIN( SELECT t._from, t.asset, round(ifnull(sum(t.amount), 0), 8) AS balance FROM wallets w, tx t WHERE w.address = t._from GROUP BY t._from, t.asset) a ON w.address = a._from WHERE u.email = w.email AND u.is_user_logged_in = 1 ORDER BY w.address;  ";
 			Statement stmt = conn.createStatement();
 			ResultSet rs = stmt.executeQuery(sql);
 			String prevAddress = "";
@@ -208,63 +205,73 @@ public class Methods {
 		} catch (SQLException e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-		} finally {
-			DBClose(conn);
 		}
 		return result;
 	}
 
 	public JsonArray createWallet(String[] params) throws Exception {
 		String error = null;
-		JsonArray result = null;
-		int params_len = 1;
-		String label = null;
+		JsonArray result = new JsonArray();
+		String aliasName = null;
+		Double limitHourly = null;
+		Double limitDaily = null;
+		Double limitMaxAmount = null;
+		String callbackUrl = null;
 		int isDefault = 0;
 		Connection conn = null;
 		User user = null;
-		List<User> userList = new ArrayList<>();
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
 			}
-			if (params != null) {
-				if (params.length > 1) {
-					error = "Too many parameters, please see help menu.";
-					result = new JsonArray();
-					result.add(error);
-					return result;
-				} else if (params.length == 1) {
-					label = params[0];
+			if (params != null && params.length > 0) {
+				for (int i = 0; i < params.length; i++) {
+					String param = params[i];
+					String[] criterias = replaceSpaceAndSplit(param);
+					String key = criterias[0].toLowerCase();
+					String value = criterias[1];
+					if (key.equals(SikkeConstant.ALIAS_NAME)) {
+						aliasName = value;
+					} else if (key.equals(SikkeConstant.LIMIT_HOURLY)) {
+						limitHourly = Double.parseDouble(value);
+					} else if (key.equals(SikkeConstant.LIMIT_DAILY)) {
+						limitDaily = Double.parseDouble(value);
+					} else if (key.equals(SikkeConstant.LIMIT_MAX_AMOUNT)) {
+						limitMaxAmount = Double.parseDouble(value);
+					} else if (key.equals(SikkeConstant.CALLBACK_URL)) {
+						callbackUrl = value;
+					}
 				}
 			}
 			WalletKey walletKey = WalletKey.getWalletKeys();
-			result = createWallet(label, isDefault, null, null, null, walletKey, user, conn);
+			result = createWallet(aliasName, limitHourly, limitDaily, limitMaxAmount, callbackUrl, walletKey, user,
+					conn);
 			if (result != null) {
-				isWalletCreated = true;
+				_System.isWalletCreated = true;
 			}
 			return result;
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
 			throw new Exception(e);
-		} finally {
-			DBClose(conn);
 		}
 	}
 
-	public JsonArray createWallet(String label, int isDefault, Double limitHourly, Double limitDaily,
-			Double limitMaxAmount, WalletKey walletKey, User user, Connection conn) {
+	public JsonArray createWallet(String label, Double limitHourly, Double limitDaily, Double limitMaxAmount,
+			String callbackUrl, WalletKey walletKey, User user, Connection conn) {
 		JsonArray result = null;
 		JsonObject jo = null;
 		try {
 			if (conn == null) {
-				conn = this.connect();
+				conn = Connect.getConnect();
 			}
-
 			String email = user.email;
-			String sql = "INSERT INTO wallets (address,email,label,private_key,public_key,is_default,limit_hourly,limit_daily,limit_max_amount) VALUES(?,?,?,?,?,?,?,?,?)";
+			String sql = "INSERT INTO wallets (address,email,label,private_key,public_key,is_default,limit_hourly,limit_daily,limit_max_amount,callback_url) VALUES(?,?,?,?,?,?,?,?,?,?)";
+			String strLimitHourly = limitHourly == null ? "" : String.valueOf(limitHourly);
+			String strLimitDaily = limitDaily == null ? "" : String.valueOf(limitDaily);
+			String strLimitMaxAmount = limitMaxAmount == null ? "" : String.valueOf(limitMaxAmount);
 
 			PreparedStatement pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, walletKey.getAddress());
@@ -272,10 +279,11 @@ public class Methods {
 			pstmt.setString(3, label != null ? label : "");
 			pstmt.setString(4, walletKey.getPrivateKey());
 			pstmt.setString(5, walletKey.getPublicKey());
-			pstmt.setInt(6, isDefault);
-			pstmt.setString(7, String.valueOf(limitHourly));
-			pstmt.setString(8, String.valueOf(limitDaily));
-			pstmt.setString(9, String.valueOf(limitMaxAmount));
+			pstmt.setBoolean(6, false);
+			pstmt.setString(7, strLimitHourly);
+			pstmt.setString(8, strLimitDaily);
+			pstmt.setString(9, strLimitMaxAmount);
+			pstmt.setString(10, callbackUrl);
 			pstmt.executeUpdate();
 			result = new JsonArray();
 			jo = new JsonObject();
@@ -285,10 +293,10 @@ public class Methods {
 			jo.addProperty("label", label != null ? label : "");
 			jo.addProperty("private_key", walletKey.getPrivateKey());
 			jo.addProperty("public_key", walletKey.getPublicKey());
-			jo.addProperty("is_default", isDefault);
-			jo.addProperty("limit_hourly", limitHourly);
-			jo.addProperty("limit_daily", limitDaily);
-			jo.addProperty("limit_max_amount", limitMaxAmount);
+			jo.addProperty("is_default", false);
+			jo.addProperty("limit_hourly", strLimitHourly);
+			jo.addProperty("limit_daily", strLimitDaily);
+			jo.addProperty("limit_max_amount", strLimitMaxAmount);
 			result.add(jo);
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -297,14 +305,13 @@ public class Methods {
 		return result;
 	}
 
-	public JsonArray getBalance(String[] params) throws Exception {
+	public JsonArray getBalances(String[] params) throws Exception {
 		String sql;
 		String whereClause = "";
 		JsonArray result = new JsonArray();
-
 		Connection conn = null;
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			if (getOnlyActiveUser(result, conn) == null) {
 				return result;
 			}
@@ -329,27 +336,26 @@ public class Methods {
 				}
 			}
 			sql = "SELECT t._from as address, t.asset as asset, round(ifnull(sum(t.amount),0),8) balance FROM wallets w, tx t,system_user u where w.address = t._from and u.email = w.email and u.is_user_logged_in = 1 "
-					+ whereClause + " group by t._from, t.asset";
+					+ whereClause + " group by t._from, t.asset order by t._from";
 
 			Statement stmt = conn.createStatement();
 			ResultSet rs = stmt.executeQuery(sql);
 			String prevAddress = "";
-			// JsonArray jsonArray = null;
-			JsonObject jsonWalletObj = null;
-			JsonObject jo = null;
+			JsonObject balanceObj = null;
 			while (rs.next()) {
 				String address = rs.getString("address");
 				String asset = rs.getString("asset");
 				String balance = rs.getString("balance");
 
 				if (prevAddress.equals(address)) {
-					jo.addProperty(asset, balance);
+					balanceObj.addProperty(asset, balance);
 				} else {
-					jsonWalletObj = new JsonObject();
-					jo = new JsonObject();
-					jo.addProperty(asset, balance);
-					jsonWalletObj.add(address, jo);
-					result.add(jsonWalletObj);
+					JsonObject jo = new JsonObject();
+					balanceObj = new JsonObject();
+					balanceObj.addProperty(asset, balance);
+					jo.addProperty("address", address);
+					jo.add("balances", balanceObj);
+					result.add(jo);
 				}
 				prevAddress = address;
 			}
@@ -357,18 +363,14 @@ public class Methods {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
 			throw new Exception(e);
-		} finally {
-			DBClose(conn);
 		}
 		return result;
 	}
 
 	public JsonArray send(String[] params) throws Exception {
 		String error = "";
-		String whereClause = "";
 		String sql = null;
 		JsonArray result = new JsonArray();
-		int paramsLength = params.length;
 		String from = null;
 		String to = null;
 		String asset = null;
@@ -382,7 +384,7 @@ public class Methods {
 		User user = null;
 
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
@@ -454,7 +456,7 @@ public class Methods {
 				}
 			}
 			String query = from + "?asset=" + asset;
-			String strBalance = new Helpers().sendGet(SikkeConstant.GET_WALLET_BALANCE_URL, query);
+			String strBalance = new Helpers().sendGet(SikkeConstant.GET_WALLET_BALANCE_URL, query, null);
 			Balance balance = gson.fromJson(strBalance, Balance.class);
 			if (balance.balance >= amount) {
 				String amountStr = SikkeConstant.formatNumber(amount);
@@ -475,7 +477,7 @@ public class Methods {
 						.append("&tx_desc=").append(desc).append("&tx_asset=").append(asset).append("&w_pub_key=")
 						.append(publicKey).append("&tx_nonce=").append(nonce).append("&is_hidden=").append(hidden);
 
-				String response = helper.sendPost("/v1/tx", sbPostQuery.toString(), null);
+				String response = helper.sendPost(SikkeConstant.SEND_TX, sbPostQuery.toString(), null);
 				// System.err.println(response);
 				TxResponse txResponse = g.fromJson(response.toString(), TxResponse.class);
 				// System.out.println(txResponse);
@@ -496,7 +498,7 @@ public class Methods {
 						jo.addProperty("asset", tx.asset);
 						jo.addProperty("action_time", tx.action_time);
 						jo.addProperty("complete_time", tx.complete_time);
-						jo.addProperty("confirmRate", tx.confirmRate);
+						jo.addProperty("confirmRate", tx.confirm_rate);
 						jo.addProperty("desc", tx.desc);
 						jo.addProperty("group", tx.group);
 						jo.addProperty("status", tx.status);
@@ -517,8 +519,6 @@ public class Methods {
 			}
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
-		} finally {
-			DBClose(conn);
 		}
 		return result;
 	}
@@ -540,7 +540,7 @@ public class Methods {
 		pstmt.setString(11, tx.asset);// asset
 		pstmt.setString(12, String.valueOf(tx.action_time));// action time
 		pstmt.setString(13, String.valueOf(tx.complete_time));// completion_time
-		pstmt.setString(14, tx.confirmRate);// block
+		pstmt.setString(14, tx.confirm_rate);// block
 		pstmt.setString(15, tx.desc);// desc
 		pstmt.setString(16, tx.group);// group
 		pstmt.setInt(17, tx.status);// status
@@ -553,12 +553,10 @@ public class Methods {
 		String error = "";
 		String sql;
 		JsonArray result = new JsonArray();
-		int paramsLength = params.length;
 		Connection conn = null;
-		List<User> userList = new ArrayList();
 		User user = null;
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
@@ -606,8 +604,6 @@ public class Methods {
 			System.out.println(e.getMessage());
 			e.printStackTrace();
 			throw new Exception(e);
-		} finally {
-			DBClose(conn);
 		}
 		return result;
 	}
@@ -616,11 +612,10 @@ public class Methods {
 		String error = "";
 		String sql;
 		JsonArray result = new JsonArray();
-		int paramsLength = params.length;
 		Connection conn = null;
 		User user = null;
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
@@ -648,25 +643,21 @@ public class Methods {
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new Exception(e);
-		} finally {
-			DBClose(conn);
 		}
-
 		return result;
 	}
 
 	public JsonArray createWalletAndSave(String[] params) throws Exception {
-		String error = null;
-		JsonArray result = null;
 		String aliasName = null;
 		Double limitHourly = null;
 		Double limitDaily = null;
 		Double limitMaxAmount = null;
+		String callbackUrl = null;
 		Connection conn = null;
 		int isDefault = 0;
 		try {
-			conn = this.connect();
-			if (params != null || params.length > 0) {
+			conn = Connect.getConnect();
+			if (params != null && params.length > 0) {
 				for (int i = 0; i < params.length; i++) {
 					String param = params[i];
 					String[] criterias = replaceSpaceAndSplit(param);
@@ -680,37 +671,30 @@ public class Methods {
 						limitDaily = Double.parseDouble(value);
 					} else if (key.equals(SikkeConstant.LIMIT_MAX_AMOUNT)) {
 						limitMaxAmount = Double.parseDouble(value);
-					} else if (key.equals(SikkeConstant.DEFAULT)) {
-						isDefault = Integer.parseInt(value);
+					} else if (key.equals(SikkeConstant.CALLBACK_URL)) {
+						callbackUrl = value;
 					}
 				}
 			}
 			WalletKey walletKey = WalletKey.getWalletKeys();
-			return createAccountAndSave(aliasName, limitHourly, limitDaily, limitMaxAmount, isDefault, walletKey, null,
-					conn);
-
+			return createAccountAndSave(aliasName, limitHourly, limitDaily, limitMaxAmount, callbackUrl, walletKey,
+					null, conn);
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 			e.printStackTrace();
 			throw new Exception(e);
-		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 		}
 	}
 
 	private JsonArray createAccountAndSave(String aliasName, Double limitHourly, Double limitDaily,
-			Double limitMaxAmount, int isDefault, WalletKey walletKey, User user, Connection conn) throws Exception {
+			Double limitMaxAmount, String callbackUrl, WalletKey walletKey, User user, Connection conn)
+			throws Exception {
 		JsonArray result = new JsonArray();
 		Gson g = new Gson();
 		String error = "";
-		List<User> userList = new ArrayList<>();
-		boolean isConnectionNull = false;
 		try {
 			if (conn == null) {
-				conn = this.connect();
-				isConnectionNull = true;
+				conn = Connect.getConnect();
 			}
 			if (user == null) {
 				user = getOnlyActiveUser(result, conn);
@@ -729,19 +713,12 @@ public class Methods {
 			String privateKey = walletKey.getPrivateKey();
 			PrivateKey pvKey = ECDSAHelper.importPrivateKey(privateKey);
 			String signedTx = ECDSAHelper.sign(nonceStr, pvKey);
-
-			String plainText = AES256Cipher.decrypt(AppHelper.hexStringToByteArray(user.crypt_key),
-					AppHelper.hexStringToByteArray(user.crypt_iv), user.encrypted_password);
-			byte[] u_password = AES256Cipher.key128Bit(plainText);
+			byte[] u_password = AES256Cipher.key128Bit(user.getPassword());
 			String encryptedPvtKey = AES256Cipher.encryptPvt(u_password, privateKey);
-
-			// System.out.println("encryptedPvtKey : " + encryptedPvtKey);
-
-			String decryptedPAssword = AES256Cipher.decryptPvt(u_password, encryptedPvtKey);
 
 			sb.append("w_pub_key=" + walletKey.getPublicKey());
 			sb.append("&sign=" + signedTx);
-			sb.append("&w_zeugma=" + encryptedPvtKey);
+			sb.append("&w_zeugma=" + URLEncoder.encode(encryptedPvtKey, "UTF-8"));
 			sb.append("&w_owner_id=" + user.user_id);
 			sb.append("&nonce=" + nonceStr);
 			sb.append("&w_status=" + 1);
@@ -757,17 +734,19 @@ public class Methods {
 			if (limitMaxAmount != null) {
 				sb.append("&w_limit_max_amount=" + String.valueOf(limitMaxAmount));
 			}
+			if (callbackUrl != null) {
+				sb.append("&w_callback_url=" + callbackUrl);
+			}
 			String response = helper.sendPost("/v1/wallet", sb.toString(), SikkeConstant.REQUEST_PUT);
-			// System.err.println(response);
 			WalletResponse walletResponse = g.fromJson(response.toString(), WalletResponse.class);
 
 			if (walletResponse != null) {
 				if (walletResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
 					wallet wallet = walletResponse.wallet;
 					if (wallet != null) {
-						result = createWallet(wallet.alias_name, isDefault, limitHourly, limitDaily, limitMaxAmount,
+						result = createWallet(wallet.alias_name, limitHourly, limitDaily, limitMaxAmount, callbackUrl,
 								walletKey, user, conn);
-						isWalletCreated = true;
+						_System.isWalletCreated = true;
 						return result;
 					}
 				} else {
@@ -783,33 +762,83 @@ public class Methods {
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-		} finally {
-			if (isConnectionNull) {
-				DBClose(conn);
-			}
 		}
 		return result;
 	}
 
-	public JsonArray syncWallet(String[] params) throws Exception {
+	public synchronized JsonArray syncWallets(String[] params, User _user) throws Exception {
 		JsonArray result = new JsonArray();
 		Gson g = new Gson();
 		String sql = null;
 		String error = "";
 		StringBuilder sb = null;
-		String limitHourly = null, aliasName = null, limitMaxAmount = null, limitDaily = null, privateKey = null,
-				nonce = null, publicKey = null, signedTx = null, address = null;
+		String limitHourly = null, aliasName = null, callbackUrl = null, limitMaxAmount = null, limitDaily = null,
+				privateKey = null, nonce = null, publicKey = null, signedTx = null, address = null;
 		Connection conn = null;
 		User user = null;
-		List<User> userList = new ArrayList<>();
 		try {
-			conn = this.connect();
-			user = getOnlyActiveUser(result, conn);
-			if (user == null) {
-				return result;
+			conn = Connect.getConnect();
+			if (_user == null) {
+				user = getOnlyActiveUser(result, conn);
+				if (user == null) {
+					return result;
+				}
+				String response = system.getAccessToken(user.email, user.getPassword());
+				User userFromAPI = g.fromJson(response.toString(), User.class);
+				if (userFromAPI.status.equals(SikkeConstant.STATUS_SUCCESS)) {
+					user.access_token = userFromAPI.access_token;
+				}
+			} else {
+				user = _user;
 			}
 			Statement stmt = conn.createStatement();
 			if (params == null || params.length == 0) {
+				int skip = 0;
+				int limit = SikkeConstant.QUERY_LIMIT;
+				int numberOfWalletsIncomingFromSikkeAPI = 0;
+				while (skip >= 0) {
+					String strWallets = new Helpers().sendGet(SikkeConstant.USER_WALLETS,
+							"?skip=" + skip + "&take=" + limit, user.access_token);
+
+					JsonObject json = (JsonObject) new JsonParser().parse(strWallets);
+					JsonArray jsonArray = (JsonArray) json.get("wallets");
+
+					if (jsonArray.size() > 0) {
+						numberOfWalletsIncomingFromSikkeAPI += jsonArray.size();
+						List<wallet> walletList = gson.fromJson(jsonArray, new TypeToken<List<wallet>>() {
+						}.getType());
+
+						if (walletList != null && walletList.size() > 0) {
+							if (walletList.size() > limit) {
+								skip++;
+							} else {
+								skip = -1;
+							}
+							for (wallet wallet : walletList) {
+								byte[] passwordByte = AES256Cipher.key128Bit(user.password);
+								//TODO try catch kaldýrýlacak.
+								try {
+									String pvKey = AES256Cipher.decryptPvt(passwordByte, wallet.w_zeugma);
+									WalletKey walletKey = WalletKey.getWalletKeysFromPrivateKey(pvKey);
+									wallet.privateKey = walletKey.getPrivateKey();
+									wallet.publicKey = walletKey.getPublicKey();
+									wallet.address = walletKey.getAddress();
+									insertOrUpdateWallet(conn, wallet, user);
+
+								} catch (Exception e) {
+									System.out.println("decryptPvt : " + e.getMessage() + "\n" + wallet.address);
+									throw new Exception(e);
+								}
+							}
+						}
+					} else {
+						skip = -1;
+					}
+				}
+				result.add("Number of wallets received from the API : " + numberOfWalletsIncomingFromSikkeAPI);
+				_System.isWalletCreated = true;
+				_System.shouldThreadContinueToWork = true;
+				int numberOfWalletsOutgoingToSikkeAPI = 0;
 				sql = "SELECT w.* FROM wallets w,system_user u where u.email = w.email and u.is_user_logged_in = 1";
 				ResultSet rs = stmt.executeQuery(sql);
 				while (rs.next()) {
@@ -818,21 +847,22 @@ public class Methods {
 					limitHourly = rs.getString("limit_hourly");
 					limitDaily = rs.getString("limit_daily");
 					limitMaxAmount = rs.getString("limit_max_amount");
+					callbackUrl = rs.getString("callback_url");
 					privateKey = rs.getString("private_key");
 					nonce = String.valueOf(SikkeConstant.getEpochTime());
 					publicKey = rs.getString("public_key");
-					int isDefault = rs.getInt("is_default");
 
 					PrivateKey pvKey = ECDSAHelper.importPrivateKey(privateKey);
 					signedTx = ECDSAHelper.sign(nonce, pvKey);
+					byte[] u_password = AES256Cipher.key128Bit(user.password);
+					String encryptedPvtKey = AES256Cipher.encryptPvt(u_password, privateKey);
 
 					sb.append("w_pub_key=" + publicKey);
 					sb.append("&sign=" + signedTx);
+					sb.append("&w_zeugma=" + URLEncoder.encode(encryptedPvtKey, "UTF-8"));
 					sb.append("&w_owner_id=" + user.user_id);
 					sb.append("&nonce=" + nonce);
 					sb.append("&w_status=" + 1);
-					sb.append("&w_status=" + 1);
-					sb.append("&w_is_default=" + rs.getInt("is_default"));
 
 					if (aliasName != null) {
 						sb.append("&w_alias_name=" + aliasName);
@@ -846,10 +876,14 @@ public class Methods {
 					if (limitMaxAmount != null) {
 						sb.append("&w_limit_max_amount=" + limitMaxAmount);
 					}
+					if (callbackUrl != null) {
+						sb.append("&w_callback_url=" + callbackUrl);
+					}
 					String response = helper.sendPost("/v1/wallet", sb.toString(), SikkeConstant.REQUEST_PUT);
 					WalletResponse walletResponse = g.fromJson(response, WalletResponse.class);
 					if (walletResponse != null) {
 						if (walletResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
+							numberOfWalletsOutgoingToSikkeAPI++;
 							wallet wallet = walletResponse.wallet;
 							if (wallet != null) {
 								JsonObject jsonObj = new JsonObject();
@@ -859,27 +893,31 @@ public class Methods {
 						}
 					}
 				}
-				DBClose(conn);
+				result.add("Number of wallets sent to the API : " + numberOfWalletsOutgoingToSikkeAPI);
 				return result;
 			} else {
 				for (int i = 0; i < params.length; i++) {
 					String param = params[i];
-					if (param.toLowerCase().startsWith("address:")) {
-						address = param.split(":")[1];
-					} else if (param.toLowerCase().startsWith("limit_daily:")) {
-						limitDaily = param.split(":")[1];
-					} else if (param.toLowerCase().startsWith("limit_hourly:")) {
+					String[] criterias = replaceSpaceAndSplit(param);
+					String key = criterias[0];
+					String value = criterias[1];
+					if (key.equals(SikkeConstant.ADDRESS)) {
+						address = value;
+					} else if (key.equals(SikkeConstant.LIMIT_DAILY)) {
+						limitDaily = value;
+					} else if (key.equals(SikkeConstant.LIMIT_HOURLY)) {
 						limitHourly = param.split(":")[1];
-					} else if (param.toLowerCase().startsWith("limit_max_amount:")) {
-						limitMaxAmount = param.split(":")[1];
-					} else if (param.toLowerCase().startsWith("alias_name:")) {
-						aliasName = param.split(":")[1];
+					} else if (key.equals(SikkeConstant.LIMIT_MAX_AMOUNT)) {
+						limitMaxAmount = value;
+					} else if (key.equals(SikkeConstant.ALIAS_NAME)) {
+						aliasName = value;
+					} else if (key.equals(SikkeConstant.CALLBACK_URL)) {
+						callbackUrl = value;
 					}
 				}
 				if (address == null) {
 					error = "Address field cannot be empty";
 					result.add(error);
-					DBClose(conn);
 					return result;
 				}
 				sql = "select * from wallets w, system_user u where w.address ='" + address
@@ -892,6 +930,7 @@ public class Methods {
 					limitHourly = limitHourly == null ? rs.getString("limit_hourly") : limitHourly;
 					limitDaily = limitDaily == null ? rs.getString("limit_daily") : limitDaily;
 					limitMaxAmount = limitMaxAmount == null ? rs.getString("limit_max_amount") : limitMaxAmount;
+					callbackUrl = callbackUrl == null ? rs.getString("callback_url") : callbackUrl;
 
 					privateKey = rs.getString("private_key");
 					publicKey = rs.getString("public_key");
@@ -899,9 +938,12 @@ public class Methods {
 					PrivateKey pvKey = ECDSAHelper.importPrivateKey(privateKey);
 
 					signedTx = ECDSAHelper.sign(nonce, pvKey);
+					byte[] u_password = AES256Cipher.key128Bit(user.password);
+					String encryptedPvtKey = AES256Cipher.encryptPvt(u_password, privateKey);
 
 					sb.append("w_pub_key=" + publicKey);
 					sb.append("&sign=" + signedTx);
+					sb.append("&w_zeugma=" + URLEncoder.encode(encryptedPvtKey, "UTF-8"));
 					sb.append("&w_owner_id=" + user.user_id);
 					sb.append("&nonce=" + nonce);
 					sb.append("&w_status=" + 1);
@@ -919,46 +961,65 @@ public class Methods {
 					if (limitMaxAmount != null) {
 						sb.append("&w_limit_max_amount=" + limitMaxAmount);
 					}
+					if (callbackUrl != null) {
+						sb.append("&w_callback_url=" + callbackUrl);
+					}
 					String response = helper.sendPost("/v1/wallet", sb.toString(), SikkeConstant.REQUEST_PUT);
 					WalletResponse walletResponse = g.fromJson(response, WalletResponse.class);
+
 					if (walletResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-						sql = "update wallets set label=?, limit_daily=?, limit_hourly=?, limit_max_amount=? where address = ?";
+						sql = "update wallets set label=?, limit_daily=?, limit_hourly=?, limit_max_amount=?, callback_url=? where address = ?";
 
 						PreparedStatement pstmt = conn.prepareStatement(sql);
 						pstmt.setString(1, aliasName);
 						pstmt.setString(2, limitDaily);
 						pstmt.setString(3, limitHourly);
 						pstmt.setString(4, limitMaxAmount);
-						pstmt.setString(5, address);
+						pstmt.setString(5, callbackUrl);
+						pstmt.setString(6, address);
 						pstmt.executeUpdate();
 
 						JsonObject jo = new JsonObject();
-						jo.addProperty("aliasName", aliasName);
 						jo.addProperty("address", address);
-						jo.addProperty("limitHourly", limitHourly);
-						jo.addProperty("limitDaily", limitDaily);
+						jo.addProperty("alias_name", aliasName);
+						jo.addProperty("limit_hourly", limitHourly);
+						jo.addProperty("limit_daily", limitDaily);
+						jo.addProperty("limit_max_amount", limitMaxAmount);
+						jo.addProperty("callback_url", callbackUrl);
 						result.add(jo);
 					}
 				} else {
-					error = "No such wallet was found.";
+					error = "The wallet you entered has not been found in the Sikke Node. Please check your wallet address and try again.";
 					result.add(error);
-					DBClose(conn);
 					return result;
 				}
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-		} finally {
-			DBClose(conn);
 		}
 		return result;
 	}
 
-	public void DBClose(Connection conn) throws SQLException {
-		if (conn != null && !conn.isClosed()) {
-			conn.close();
+	public synchronized List<Long> someFunc(String str) {
+		System.out.println(
+				"=========================================================================\nCüzdan threadi iþini baþladý...");
+		System.out.println(new Date().toString());
+		long start = System.currentTimeMillis();
+		List<Long> longList = new ArrayList<>();
+		for (long i = 0; i < 150000L; i++) {
+
+			long pow = (long) Math.pow(i, 2);
+			longList.add(pow);
+			System.out.println("Value for " + i + " : " + pow);
 		}
+		long finish = System.currentTimeMillis();
+		System.out.println(
+				"-=========================================================================\nCüzdan threadi iþini bitirdiiiiii.."
+						+ longList);
+		System.out.println("Time Elapsed (sn): " + (finish - start) / 1000);
+
+		return longList;
 	}
 
 	public JsonArray help(String[] params) {
@@ -986,35 +1047,51 @@ public class Methods {
 		// System.out.println(sb.toString());
 
 		jsonArray.add(SikkeConstant.centerString(" "));
-		jsonArray.add(SikkeConstant.centerString("...::: Sikke Client Help Menu :::..."));
+		jsonArray.add(SikkeConstant.centerString("...::: Sikke Node Help Menu :::..."));
 		jsonArray.add(SikkeConstant.centerString(" "));
 		jsonArray.add(SikkeConstant.centerString(" "));
 		jsonArray.add("[] means optional field  , () means required field");
+
 		jsonArray.add(SikkeConstant.centerString(" "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-register", " : ((email:Value),(password:Value))"));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-login", " : ((email:Value), (password:Value))"));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-logout", " "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-getBalance", " : [[address],[asset]]"));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-makeDefault", " : ((address))                    "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-importWallet", " : ((private key))          "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-createWallet", " : [[label]]        "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-createAndSaveWallet",
+		jsonArray.add(SikkeConstant.centerString(" "));
+		jsonArray.add("Account Commands");
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-register", " : ((email:Value),(password:Value))"));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-login", " : ((email:Value), (password:Value))"));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-logout", " "));
+		jsonArray.add(SikkeConstant.centerString(" "));
+		jsonArray.add("Wallet Commands");
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-getBalances", " : [[address],[asset]]"));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-makeDefault", " : ((address))                    "));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-importWallet", " : ((private key))          "));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-createWallet", " : [[label]]        "));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-createAndSaveWallet",
 				" : [[alias_name:value] & [limit_daily:value] & [limit_hourly:value] & [limit_max_amount:value]]"));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-listWallets", ""));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-synchWallet", " : [[label]]          "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-getHistories",
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-listWallets", ""));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-syncWallets", " : [[label]]          "));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-importWallets", "  "));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-exportWallets", "   "));
+		jsonArray.add(SikkeConstant.centerString(" "));
+		jsonArray.add("Transaction Commands");
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-getHistories",
 				" : [[address:value],[hash:value] | [seq:value] | [block:value]]  -->  Example request: (address:SKK1N5WHL2m6WcfqF29Uj...)"));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-mergeBalances", " : [[label]]          "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-send",
+
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-getTransactions",
+				" : [[skip:value],[limit:value] | [sort:value] | [seq_gt:value]| [wallet:value]| [wallets:value1,value2,value3,..]| [asset:value]| [type:value]| [subtype:value]| [status:value]| [public_key:value]| [from_date:value]| [to_date:value]| [user_id:value]| [seq:value]| [group:value]]"));
+
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-mergeBalances", " : [[label]]          "));
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-send",
 				" : ([from:value],(to:value),[asset:value],(amount),[desc])  --> if the sender wallet is not specified. The default wallet is used."));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-importWallets", ""));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-exportWallets", ""));
-		jsonArray.add(String.format("%1$-25s %2$20s", "-help", " : Shows help menu       "));
+
+		jsonArray.add(String.format("%1$-3s %2$-25s %3$20s", "", "-help", " : Shows help menu       "));
 		jsonArray.add(SikkeConstant.centerString(" "));
 		jsonArray.add(SikkeConstant.centerString(" "));
 		jsonArray.add(SikkeConstant.centerString(" "));
-		jsonArray.add(String.format("%1$-25s %2$20s", "Sikke Client System Github",
-				": https://github.com/sikke-official/sikke-java-client "));
+		jsonArray.add(String.format("%1$-25s %2$20s", "Sikke Node Github",
+				": https://github.com/sikke-official/sikke-nodes"));
+		jsonArray.add(String.format("%1$-25s %2$20s", "Sikke Node Server Github",
+				": https://github.com/sikke-official/sikke-nodes/tree/master/release/node/v.0.1.0/server"));
+		jsonArray.add(String.format("%1$-25s %2$20s", "Sikke Node Console Github",
+				": https://github.com/sikke-official/sikke-nodes/tree/master/release/node/v.0.1.0/console"));
 		return jsonArray;
 	}
 
@@ -1031,8 +1108,9 @@ public class Methods {
 		HashSet<String> hashAddress = null;
 		User user = null;
 		JsonObject jo = null;
+		boolean isReceiverWalletEntered = false;
 		try {
-			conn = this.connect();
+			conn = Connect.getConnect();
 			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
@@ -1048,6 +1126,7 @@ public class Methods {
 						String key = criterias[0].toLowerCase();
 						String value = criterias[1];
 						if (key.equals(SikkeConstant.ADDRESS)) {
+							isReceiverWalletEntered = true;
 							sql += " and w.address='" + value + "'";
 						} else if (key.equals(SikkeConstant.TEXT_ASSET)) {
 							asset = value.toUpperCase();
@@ -1072,8 +1151,10 @@ public class Methods {
 			if (asset != null) {
 				whereClausePart = " and t.asset = '" + asset + "'";
 			}
-			sql = "SELECT w1.address,w1.private_key,w1.public_key,a.amount,a.asset FROM wallets w1,(SELECT t._from,t.asset,sum(t.amount) amount FROM wallets w,tx t,system_user u WHERE u.email = w.email and  u.is_user_logged_in = 1 and w.address = t._from and w.is_default = 0 "
-					+ whereClausePart + "GROUP BY t._from,t.asset) a WHERE w1.address = a._from and a.amount >1";
+			String strDefaultCondition = isReceiverWalletEntered ? "" : " and is_default = 0 ";
+			sql = "SELECT w1.address,w1.private_key,w1.public_key,a.amount,a.asset FROM wallets w1,(SELECT t._from,t.asset,sum(t.amount) amount FROM wallets w,tx t,system_user u WHERE u.email = w.email and  u.is_user_logged_in = 1 and w.address = t._from  "
+					+ strDefaultCondition + whereClausePart
+					+ "GROUP BY t._from,t.asset) a WHERE w1.address = a._from and a.amount >1";
 
 			stmt = conn.createStatement();
 			rs = stmt.executeQuery(sql);
@@ -1109,7 +1190,7 @@ public class Methods {
 						.append(senderWallet.asset).append("&w_pub_key=").append(senderWallet.publicKey)
 						.append("&tx_nonce=").append(String.valueOf(nonce)).append("&is_hidden=0");
 
-				response = helper.sendPost("/v1/tx", sbPostQuery.toString(), null);
+				response = helper.sendPost(SikkeConstant.SEND_TX, sbPostQuery.toString(), null);
 				// System.err.println(response);
 				TxResponse txResponse = g.fromJson(response.toString(), TxResponse.class);
 				if (txResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
@@ -1124,7 +1205,7 @@ public class Methods {
 					// TODO Error code a bakarak yetersiz bakiye kontrolü yapýlcak
 
 					String strBalance = new Helpers().sendGet(SikkeConstant.GET_WALLET_BALANCE_URL,
-							senderWallet.address + "?asset=" + senderWallet.asset);
+							senderWallet.address + "?asset=" + senderWallet.asset, null);
 					Balance balance = gson.fromJson(strBalance, Balance.class);
 
 					if (balance != null && balance.balance > 0) {
@@ -1146,7 +1227,7 @@ public class Methods {
 								.append(senderWallet.publicKey).append("&tx_nonce=").append(String.valueOf(nonce))
 								.append("&is_hidden=0");
 
-						response = helper.sendPost("/v1/tx", sbPostQuery.toString(), null);
+						response = helper.sendPost(SikkeConstant.SEND_TX, sbPostQuery.toString(), null);
 						if (txResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
 							insertTx(conn, txResponse.tx);
 							jo = new JsonObject();
@@ -1167,14 +1248,12 @@ public class Methods {
 			}
 			insertOutdatedWallet(conn, hashAddress);
 			stmt.close();
-			conn.close();
+			// conn.close();
 			repairTx(params);
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
 			throw new Exception(e);
-		} finally {
-			DBClose(conn);
 		}
 		return result;
 	}
@@ -1185,39 +1264,35 @@ public class Methods {
 	}
 
 	public JsonArray repairTx(String[] params) throws Exception {
-		Connection con = null;
+		Connection conn = null;
 		String sql = null;
 		String address = null;
 		JsonArray result = new JsonArray();
 		String error = null;
-		Gson g = new Gson();
 		HashSet<String> hashAddress = null;
 		User user = null;
 		try {
-			con = this.connect();
+			conn = Connect.getConnect();
 			hashAddress = new HashSet<>();
-			user = getOnlyActiveUser(result, con);
+			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
 			}
 			sql = "SELECT a.*, ifnull(b.maxSeqNum, 0) maxSeqNumber FROM( SELECT w.address, w.public_key, w.private_key FROM outdated_wallet o, wallets w, system_user u WHERE w.address = o.address AND u.email = w.email AND u.is_user_logged_in = 1) a LEFT JOIN ( SELECT _from, max(t.seq) AS maxSeqNum FROM tx t, system_user u, wallets w WHERE t._from = w.address AND w.email = u.email AND u.is_user_logged_in = 1 GROUP BY t._from ) b ON a.address = b._from order by maxSeqNumber desc ;";
-			Statement stmt = con.createStatement();
+			Statement stmt = conn.createStatement();
 			ResultSet rs = stmt.executeQuery(sql);
 			while (rs.next()) {
 				address = rs.getString("address");
 				String publicKey = rs.getString("public_key");
-				// int maxSeqNumber = rs.getInt("maxSeqNumber");
 				int skip = 0;
 				int limit = SikkeConstant.QUERY_LIMIT;
 				int totalRecordBasedOnAddress = 0;
 
 				while (skip >= 0) {
 					StringBuilder sbTx = new StringBuilder().append("wallet=").append(address).append("&w_pub_key=")
-							.append(publicKey)./* append("&seq_gt=").append(maxSeqNumber). */append("&limit=")
-							.append(String.valueOf(limit)).append("&skip=").append(String.valueOf(skip))
-							.append("&sort=asc");
-					String response = helper.sendGet("/v1/tx?", sbTx.toString());
-					// System.err.println(response);
+							.append(publicKey).append("&limit=").append(String.valueOf(limit)).append("&skip=")
+							.append(String.valueOf(skip)).append("&sort=asc");
+					String response = helper.sendGet("/v1/tx?", sbTx.toString(), null);
 
 					JsonObject json = (JsonObject) new JsonParser().parse(response);
 					JsonArray jsonArray = (JsonArray) json.get("tx_items");
@@ -1234,7 +1309,7 @@ public class Methods {
 								skip = -1;
 							}
 							for (tx tx : txList) {
-								insertOrUpdateTx(con, tx);
+								insertOrUpdateTx(conn, tx);
 							}
 						}
 					} else {
@@ -1245,13 +1320,11 @@ public class Methods {
 				result.add(error);
 				hashAddress.add(address);
 			}
-			deleteOutdatedWallets(con, hashAddress);
+			deleteOutdatedWallets(conn, hashAddress);
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 			e.printStackTrace();
 			throw new Exception(e);
-		} finally {
-			DBClose(con);
 		}
 		if (address == null) {
 			error = "No wallet to repair.";
@@ -1262,32 +1335,31 @@ public class Methods {
 
 	synchronized public JsonArray syncTx() throws Exception {
 		JsonArray result = new JsonArray();
-		Connection con = null;
+		Connection conn = null;
 		wallet wallet = null;
 		String error = null;
-		String sql = null;
 		Gson g = new Gson();
 		int maxSeqNum = 0;
 
 		try {
-			con = this.connect();
-			if (hmap == null) {
-				hmap = new HashMap<wallet, Integer>();
-				getWalletInfo(con, hmap);
+			conn = Connect.getConnect();
+			if (_System.hmap == null) {
+				_System.hmap = new HashMap<wallet, Integer>();
+				getWalletInfo(conn, _System.hmap);
 			} else {
-				if (isWalletCreated) {
-					hmap = new HashMap<wallet, Integer>();
-					getWalletInfo(con, hmap);
-					isWalletCreated = false;
+				if (_System.isWalletCreated) {
+					_System.hmap = new HashMap<wallet, Integer>();
+					getWalletInfo(conn, _System.hmap);
+					_System.isWalletCreated = false;
 				}
 			}
-			Iterator iterator = hmap.entrySet().iterator();
+			Iterator<?> iterator = _System.hmap.entrySet().iterator();
 			while (iterator.hasNext()) {
 				int skip = 0;
 				int limit = SikkeConstant.QUERY_LIMIT;
 				int totalRecordBasedOnAddress = 0;
 
-				Map.Entry me = (Map.Entry) iterator.next();
+				Map.Entry<wallet, Integer> me = (Map.Entry) iterator.next();
 				wallet = (sikke.cli.defs.wallet) me.getKey();
 				maxSeqNum = (int) me.getValue();
 
@@ -1297,7 +1369,7 @@ public class Methods {
 							.append("&seq_gt=").append(maxSeqNum).append("&limit=").append(String.valueOf(limit))
 							.append("&skip=").append(String.valueOf(skip)).append("&sort=asc");
 
-					String response = helper.sendGet("/v1/tx?", sbTx.toString());
+					String response = helper.sendGet("/v1/tx?", sbTx.toString(), null);
 					// System.err.println(response);
 					JsonObject json = (JsonObject) new JsonParser().parse(response);
 					JsonArray jsonArray = (JsonArray) json.get("tx_items");
@@ -1310,7 +1382,7 @@ public class Methods {
 							for (int i = 0; i < txList.size(); i++) {
 								tx t = txList.get(i);
 								int txSize = txList.size();
-								insertOrUpdateTx(con, t);
+								insertOrUpdateTx(conn, t);
 
 								if (i == txSize - 1) {
 									me.setValue(t.seq);
@@ -1335,8 +1407,6 @@ public class Methods {
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
-		} finally {
-			DBClose(con);
 		}
 		return result;
 	}
@@ -1353,7 +1423,7 @@ public class Methods {
 			maxSeqNum = rs.getInt("maxSeqNum");
 			wallet.address = rs.getString("address");
 			wallet.publicKey = rs.getString("public_key");
-			hmap.put(wallet, maxSeqNum);
+			_System.hmap.put(wallet, maxSeqNum);
 		}
 	}
 
@@ -1365,7 +1435,7 @@ public class Methods {
 				+ ",prev_hash='" + tx.prev_hash + "'" + ",nonce='" + tx.nonce + "'" + ",action_time=" + tx.action_time
 				+ ",completion_time=" + tx.complete_time + ",_from='" + tx.wallet + "'" + ",_to='" + tx.to + "'"
 				+ ",asset='" + tx.asset + "'" + ",[group]=" + tx.group + ",seq=" + tx.seq + ",[desc]='" + tx.desc + "'"
-				+ ",confirm_rate=" + tx.confirmRate + ",status=" + tx.status + ",type=" + tx.type + ",subtype="
+				+ ",confirm_rate=" + tx.confirm_rate + ",status=" + tx.status + ",type=" + tx.type + ",subtype="
 				+ tx.subtype;
 		PreparedStatement pstmt = con.prepareStatement(sql);
 		pstmt.setString(1, tx._id); // id
@@ -1381,12 +1451,39 @@ public class Methods {
 		pstmt.setString(11, tx.asset);// asset
 		pstmt.setString(12, String.valueOf(tx.action_time));// action time
 		pstmt.setString(13, String.valueOf(tx.complete_time));// completion_time
-		pstmt.setString(14, tx.confirmRate);// confirmRate
+		pstmt.setString(14, tx.confirm_rate);// confirmRate
 		pstmt.setString(15, tx.desc);// desc
 		pstmt.setString(16, tx.group);// group
 		pstmt.setInt(17, tx.status);// status
 		pstmt.setInt(18, tx.type);// type
 		pstmt.setInt(19, tx.subtype);// subtype
+		pstmt.executeUpdate();
+	}
+
+	private void insertOrUpdateWallet(Connection con, wallet wallet, User user) throws SQLException {
+		String sql;
+		String strLimitHourly = wallet.limit_hourly == null ? "" : String.valueOf(wallet.limit_hourly);
+		String strLimitDaily = wallet.limit_daily == null ? "" : String.valueOf(wallet.limit_daily);
+		String strLimitMaxAmount = wallet.limit_max_amount == null ? "" : String.valueOf(wallet.limit_max_amount);
+
+		sql = "insert into wallets (address,email,label,private_key,public_key,limit_hourly,limit_daily,callback_url,contract_token,limit_max_amount,is_default) "
+				+ "values (?,?,?,?,?,?,?,?,?,?,?) on conflict (address) do update set " + "label='" + wallet.alias_name
+				+ "'" + ",private_key='" + wallet.privateKey + "'" + ",public_key='" + wallet.publicKey + "'"
+				+ ",limit_hourly='" + strLimitHourly + "'" + ",limit_daily='" + strLimitDaily + "'" + ",callback_url="
+				+ wallet.callback_url + ",contract_token=" + wallet.contract_token + ",limit_max_amount='"
+				+ strLimitMaxAmount + "'";
+		PreparedStatement pstmt = con.prepareStatement(sql);
+		pstmt.setString(1, wallet.address); // address
+		pstmt.setString(2, user.email);// email
+		pstmt.setString(3, wallet.alias_name);
+		pstmt.setString(4, wallet.privateKey);// privateKey
+		pstmt.setString(5, wallet.publicKey);// publicKey
+		pstmt.setString(6, strLimitHourly);// limit_hourly
+		pstmt.setString(7, strLimitDaily);// limit_daily
+		pstmt.setString(8, wallet.callback_url);// callback_url
+		pstmt.setString(9, wallet.contract_token);// contract_token
+		pstmt.setString(10, strLimitMaxAmount); // limit_max_amount
+		pstmt.setBoolean(11, false);// is_default
 		pstmt.executeUpdate();
 	}
 
@@ -1403,7 +1500,6 @@ public class Methods {
 	private void insertOutdatedWallet(Connection conn, HashSet<String> addresses) throws SQLException {
 		Statement statement = conn.createStatement();
 		for (String address : addresses) {
-			int a = 0;
 			String query = "insert or ignore into outdated_wallet (address) values('" + address + "')";
 			statement.addBatch(query);
 		}
@@ -1418,19 +1514,16 @@ public class Methods {
 	}
 
 	public JsonArray logout(String[] params) throws Exception {
-		Connection con = null;
+		Connection conn = null;
 		JsonArray result = new JsonArray();
 		try {
-			con = this.connect();
-			system.disableAllUserLoginStatus(con);
-			system.shouldThreadContinueToWork = false;
+			// conn = this.connect();
+			conn = Connect.getConnect();
+			system.disableAllUserLoginStatus(conn);
+			_System.shouldThreadContinueToWork = false;
 			result.add(SikkeConstant.LOGOUT_PERFORMED);
 		} catch (Exception e) {
 			throw new Exception(e);
-		} finally {
-			if (con != null && !con.isClosed()) {
-				con.close();
-			}
 		}
 		return result;
 	}
@@ -1444,7 +1537,7 @@ public class Methods {
 		Gson g = new Gson();
 		User user = null;
 		User userFromService = null;
-
+		boolean isUserSuccessfullyLoggedIn = false;
 		try {
 			if (params != null) {
 				if (params.length == 2) {
@@ -1474,28 +1567,28 @@ public class Methods {
 				result.add(SikkeConstant.PASSWORD_COULD_NOT_FOUND);
 				return result;
 			}
-			conn = this.connect();
+			conn = Connect.getConnect();
 			system.getActiveUsers(conn, userList);
 			if (userList.size() == 0) {
 				String response = system.getAccessToken(username, password);
-				user = g.fromJson(response.toString(), User.class);
-				if (user.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-
+				userFromService = g.fromJson(response.toString(), User.class);
+				if (userFromService.status.equals(SikkeConstant.STATUS_SUCCESS)) {
+					user = userFromService;
 					byte[] pin_byte = AES256Cipher.getRandomAesCryptKey();
 					byte[] iv_byte = AES256Cipher.getRandomAesCryptIv();
 					user.crypt_key = AppHelper.toHexString(pin_byte);
 					user.crypt_iv = AppHelper.toHexString(iv_byte);
 					user.encrypted_password = AES256Cipher.encrypt(pin_byte, iv_byte, password);
-					String passwordNew = AES256Cipher.decrypt(pin_byte, iv_byte, user.encrypted_password);
-
+					user.password = password;
 					user.is_user_logged_in = true;
+					_System.shouldThreadContinueToWork = true;
+					isUserSuccessfullyLoggedIn = true;
 					system.saveOrUpdateUser(conn, user);
-					system.shouldThreadContinueToWork = true;
-					// jsonArray.add(SikkeConstant.USER_COULD_NOT_FOUND);
 					result.add(SikkeConstant.YOU_HAVE_LOGGED_IN_SUCCESSFULLY);
-					return result;
 				} else {
 					result.add(SikkeConstant.USER_COULD_NOT_FOUND);
+					_System.shouldThreadContinueToWork = true;
+					system.disableAllUserLoginStatus(conn);
 					return result;
 				}
 			} else if (userList.size() == 1) {
@@ -1508,21 +1601,28 @@ public class Methods {
 						user.access_token = userFromService.access_token;
 						user.refresh_token = userFromService.refresh_token;
 						user.is_user_logged_in = true;
+						user.password = password;
 						system.saveOrUpdateUser(conn, user);
+						isUserSuccessfullyLoggedIn = true;
+						_System.shouldThreadContinueToWork = true;
+						result.add(SikkeConstant.YOU_HAVE_ALREADY_LOGGED_IN);
+					} else {
+						result.add(SikkeConstant.USER_COULD_NOT_FOUND);
+						_System.shouldThreadContinueToWork = false;
+						system.disableAllUserLoginStatus(conn);
+						return result;
 					}
-					result.add(SikkeConstant.YOU_HAVE_ALREADY_LOGGED_IN);
 				} else {
 					result.add(SikkeConstant.ANOTHER_USER_HAVE_ALREADY_LOGGED_IN);
+					_System.shouldThreadContinueToWork = true;
+					return result;
 				}
-				system.shouldThreadContinueToWork = true;
-				return result;
 			} else if (userList.size() > 1) {
 				system.disableAllUserLoginStatus(conn);
 				String response = system.getAccessToken(username, password);
 				userFromService = g.fromJson(response.toString(), User.class);
-
 				if (userFromService.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-
+					user = userFromService;
 					byte[] pin_byte = AES256Cipher.getRandomAesCryptKey();
 					byte[] iv_byte = AES256Cipher.getRandomAesCryptIv();
 
@@ -1534,45 +1634,36 @@ public class Methods {
 					user.refresh_token = userFromService.refresh_token;
 					system.saveOrUpdateUser(conn, user);
 
-					system.shouldThreadContinueToWork = true;
+					_System.shouldThreadContinueToWork = true;
 					result.add(SikkeConstant.YOU_HAVE_LOGGED_IN_SUCCESSFULLY);
-					return result;
+					isUserSuccessfullyLoggedIn = true;
 				}
+			}
+			if (isUserSuccessfullyLoggedIn && user != null) {
+				Thread t = new Thread(new OneShotTask(user));
+				t.setName("Sikke Wallet Synronized Thread");
+				t.start();
 			}
 		} catch (Exception e) {
 			throw new Exception(e);
-		} finally {
-			if (conn != null) {
-				conn.close();
-			}
 		}
 		return result;
 	}
 
 	public JsonArray register(String[] params) throws Exception {
 		JsonArray result = new JsonArray();
-		Connection con = null;
+		Connection conn = null;
 		User user = null;
 		String username = null;
 		String password = null;
 		StringBuilder sbPostQuery = new StringBuilder();
 		Gson g = new Gson();
 		try {
-			con = this.connect();
-			user = getOnlyActiveUser(result, con);
-			if (user != null) {
-				result = new JsonArray();
-				result.add("A user has already logged in. You must logout to register.");
-				return result;
-			} else {
-				result = new JsonArray();
-			}
 			for (int i = 0; i < params.length; i++) {
 				String param = params[i];
 				String[] criterias = replaceSpaceAndSplit(param);
 				String key = criterias[0].toLowerCase();
 				String value = criterias[1];
-
 				if (key.equals(SikkeConstant.EMAIL)) {
 					username = value;
 					continue;
@@ -1582,45 +1673,66 @@ public class Methods {
 				}
 			}
 			if (username == null) {
-				result.add("Username cannot be empty.");
+				result.add(SikkeConstant.USERNAME_CANNOT_BE_EMPTY);
+				return result;
 			}
 			if (password == null) {
-				result.add("Password cannot be empty.");
+				result.add(SikkeConstant.PASSWORD_CANNOT_BE_EMPTY);
+				return result;
 			}
-			sbPostQuery.append("email=").append(username).append("&password=").append(password)
-					.append("&password_confirm=").append(password);
-
-			String response = helper.sendPost("/v1/auth/signup", sbPostQuery.toString(), null);
-			UserResponse userResponse = g.fromJson(response.toString(), UserResponse.class);
-			if (userResponse != null) {
-				if (userResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-					user = userResponse.user;
-					byte[] pin_byte = AES256Cipher.getRandomAesCryptKey();
-					byte[] iv_byte = AES256Cipher.getRandomAesCryptIv();
-					user.crypt_key = AppHelper.toHexString(pin_byte);
-					user.crypt_iv = AppHelper.toHexString(iv_byte);
-					user.crypt_key = AppHelper.toHexString(pin_byte);
-					user.encrypted_password = AES256Cipher.encrypt(pin_byte, iv_byte, password);
-					user.user_id = user._id;
-					system.saveOrUpdateUser(con, user);
-					result.add("You have successfully registered. You must be logged in to use the system.");
-
-					WalletKey walletKey = WalletKey.getWalletKeys();
-					return createAccountAndSave(SikkeConstant.DEFAULT_WALLET, null, null, null, 1, walletKey, user,
-							con);
+			// conn = this.connect();
+			conn = Connect.getConnect();
+			user = getUserByEmail(username, conn);
+			if (user != null) {
+				if (user.is_user_logged_in) {
+					result.add(SikkeConstant.YOU_HAVE_ALREADY_LOGGED_IN);
 				} else {
-					result.add(userResponse.message);
-					return result;
+					User activeUser = getOnlyActiveUser(result, conn);
+					result = new JsonArray();
+					if (activeUser != null) {
+						if (!activeUser.email.equals(user.email)) {
+							result.add(SikkeConstant.ANOTHER_USER_HAVE_ALREADY_LOGGED_IN);
+						}
+					} else {
+						result.add(
+								SikkeConstant.YOU_HAVE_ALREADY_REGISTERED_YOU_MUST_LOGIN_TO_OPERATE_YOUR_WALLET_OPERATION);
+					}
+				}
+				return result;
+			} else {
+				sbPostQuery.append("email=").append(username).append("&password=").append(password)
+						.append("&password_confirm=").append(password);
+
+				String response = helper.sendPost(SikkeConstant.SIGNUP, sbPostQuery.toString(), null);
+				UserResponse userResponse = g.fromJson(response.toString(), UserResponse.class);
+				if (userResponse != null) {
+					if (userResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
+						user = userResponse.user;
+						byte[] pin_byte = AES256Cipher.getRandomAesCryptKey();
+						byte[] iv_byte = AES256Cipher.getRandomAesCryptIv();
+						user.crypt_key = AppHelper.toHexString(pin_byte);
+						user.crypt_iv = AppHelper.toHexString(iv_byte);
+						user.crypt_key = AppHelper.toHexString(pin_byte);
+						user.encrypted_password = AES256Cipher.encrypt(pin_byte, iv_byte, password);
+						user.user_id = user._id;
+						system.saveOrUpdateUser(conn, user);
+						result.add(
+								SikkeConstant.YOU_HAVE_SUCCESSFULLY_REGISTERED_YOU_MUST_BE_LOGGED_IN_TO_USE_THE_SYSTEM);
+
+						WalletKey walletKey = WalletKey.getWalletKeys();
+						return createAccountAndSave(SikkeConstant.DEFAULT_WALLET, null, null, null, null, walletKey,
+								user, conn);
+					} else {
+						result.add(userResponse.message);
+						return result;
+					}
 				}
 			}
+
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 			e.printStackTrace();
 			throw new Exception(e);
-		} finally {
-			if (con != null) {
-				con.close();
-			}
 		}
 		return result;
 	}
@@ -1634,7 +1746,8 @@ public class Methods {
 		JsonObject jsonObject = new JsonObject();
 		FileWriter fileWriter = null;
 		try {
-			conn = this.connect();
+			// conn = this.connect();
+			conn = Connect.getConnect();
 			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
@@ -1667,22 +1780,23 @@ public class Methods {
 			if (fileWriter != null) {
 				fileWriter.close();
 			}
-			if (conn != null) {
-				conn.close();
-			}
+			/*
+			 * if (conn != null) { conn.close(); }
+			 */
 		}
 		return result;
 	}
 
 	public JsonArray importWallets(String[] params) throws Exception {
-		Connection con = null;
+		Connection conn = null;
 		User user = null;
 		JsonArray result = new JsonArray();
 		Gson gson = new Gson();
 		FileReader fileReader = null;
 		try {
-			con = this.connect();
-			user = getOnlyActiveUser(result, con);
+			// conn = this.connect();
+			conn = Connect.getConnect();
+			user = getOnlyActiveUser(result, conn);
 			if (user == null) {
 				return result;
 			}
@@ -1702,7 +1816,7 @@ public class Methods {
 						String sql = "INSERT INTO wallets (address, email, private_key, public_key) VALUES(?,?,?,?) on conflict (address) do update  set "
 								+ " address='" + wallet.wallet_address + "'" + ", public_key='" + wallet.public_key
 								+ "'" + ", private_key='" + wallet.private_key + "'";
-						PreparedStatement pstmt = con.prepareStatement(sql);
+						PreparedStatement pstmt = conn.prepareStatement(sql);
 						pstmt.setString(1, wallet.wallet_address);
 						pstmt.setString(2, user.email);
 						pstmt.setString(3, wallet.private_key);
@@ -1711,7 +1825,7 @@ public class Methods {
 					}
 					result.add(walletList.size()
 							+ " wallets were successfully imported from the \"wallets.skk\" file at " + path);
-					isWalletCreated = true;
+					_System.isWalletCreated = true;
 				} else {
 					result.add("No wallet to import in file. Please check the file and try again.");
 				}
@@ -1726,15 +1840,109 @@ public class Methods {
 			if (fileReader != null) {
 				fileReader.close();
 			}
-			if (con != null) {
-				con.close();
-			}
 		}
 		return result;
 	}
-}
 
-class Balance {
+	public JsonArray getTransactions(String[] params) throws Exception {
+		JsonArray result = new JsonArray();
+		StringBuilder sbGetTxQuery = new StringBuilder();
+		int skip = 0, limit = 100;
+		long from_date = 0, to_date = 0;
+		String txQuery = "";
+		String sort = "desc";
 
-	double balance;
+		try {
+			if (params != null && params.length > 0) {
+
+				for (String param : params) {
+					String[] criterias = replaceSpaceAndSplit(param);
+					if (criterias.length == 2) {
+						String key = criterias[0].toLowerCase();
+						String value = criterias[1];
+						if (key.equals(SikkeConstant.TX_PARAMS_WALLET)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_WALLET + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_ASSET)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_ASSET + "=" + value.toUpperCase());
+						} else if (key.equals(SikkeConstant.TX_PARAMS_TYPE)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_TYPE + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_SUBTYPE)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_SUBTYPE + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_STATUS)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_STATUS + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_SKIP)) {
+							if (Pattern.compile("^([0-9]|[1-9][0-9]|1000)$").matcher(value).matches()) {
+								skip = Integer.valueOf(value);
+							}
+						} else if (key.equals(SikkeConstant.TX_PARAMS_LIMIT)) {
+							if (Pattern.compile("^([0-9]|[1-9][0-9]|100)$").matcher(value).matches()) {
+								limit = Integer.valueOf(value);
+							}
+							limit = limit > SikkeConstant.QUERY_LIMIT ? SikkeConstant.QUERY_LIMIT : limit;
+						} else if (key.equals(SikkeConstant.TX_PARAMS_SORT)) {
+							sort = value;
+						} else if (key.equals(SikkeConstant.TX_PARAMS_SEQ_GT)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_SEQ_GT + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_WALLETS)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_WALLETS + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_PUBLIC_KEY)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_PUBLIC_KEY + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_FROM_DATE)) {
+							from_date = SikkeConstant.stringDateToEpochTime(value);
+							if (from_date > 0) {
+								sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_FROM_DATE + "=" + to_date);
+							}
+						} else if (key.equals(SikkeConstant.TX_PARAMS_TO_DATE)) {
+							to_date = SikkeConstant.stringDateToEpochTime(value);
+							if (to_date > 0) {
+								sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_TO_DATE + "=" + to_date);
+							}
+						} else if (key.equals(SikkeConstant.TX_PARAMS_USER_ID)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_USER_ID + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_SEQ)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_SEQ + "=" + value);
+						} else if (key.equals(SikkeConstant.TX_PARAMS_GROUP)) {
+							sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_GROUP + "=" + value);
+						}
+					}
+				}
+			}
+			sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_SKIP + "=" + skip);
+			sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_LIMIT + "=" + limit);
+			sbGetTxQuery.append("&" + SikkeConstant.TX_PARAMS_SORT + "=" + sort);
+
+			if (sbGetTxQuery != null) {
+				txQuery = sbGetTxQuery.toString().replaceFirst("&", "?");
+			}
+			String strResult = new Helpers().sendGet(SikkeConstant.GET_TX, txQuery, null);
+			JsonObject json = (JsonObject) new JsonParser().parse(strResult);
+			result.add(json);
+			return result;
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			System.out.println(e.getMessage());
+			throw new Exception(e);
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.out.println(e.getMessage());
+			throw new Exception(e);
+		}
+	}
+
+	class OneShotTask implements Runnable {
+		User user;
+
+		OneShotTask(User _user) {
+			user = _user;
+		}
+
+		public void run() {
+			try {
+				syncWallets(null, user);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
 }

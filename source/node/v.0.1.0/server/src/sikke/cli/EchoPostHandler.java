@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,12 +21,9 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.omg.CORBA.Request;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -36,7 +35,7 @@ import sikke.cli.helpers._System;
  * @author mumbucoglu
  */
 public class EchoPostHandler implements HttpHandler {
-	JSONRPC jsonrpc = new JSONRPC();
+	JsonRpc jsonrpc = new JsonRpc();
 
 	public EchoPostHandler() {
 
@@ -48,7 +47,18 @@ public class EchoPostHandler implements HttpHandler {
 			Map<String, Object> parameters = new HashMap();
 			InputStreamReader isr = new InputStreamReader(he.getRequestBody(), "utf-8");
 			BufferedReader br = new BufferedReader(isr);
-			String query = br.readLine();
+			String query = "";
+			String line;
+
+			String hostAddress = he.getRemoteAddress().getAddress().getHostAddress();
+			List<String> requestIPs = _System.getConfig("rpcallowip");
+			if (!requestIPs.contains(hostAddress)) {
+				he.close();
+				return;
+			}
+			while ((line = br.readLine()) != null) {
+				query += line;
+			}
 			Headers requestHeaders = he.getRequestHeaders();
 			String requestMethod = he.getRequestMethod();
 			String path = he.getRequestURI().getPath();
@@ -110,6 +120,7 @@ public class EchoPostHandler implements HttpHandler {
 			String c = gson.toJson(a);
 			os.write(c.getBytes());
 			os.close();
+
 		} catch (Exception ex) {
 			Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, null, ex);
 		}
@@ -156,7 +167,6 @@ class rpcObj {
 	String jsonrpc;
 	String method;
 	JsonArray result;
-
 	String[] params;
 }
 

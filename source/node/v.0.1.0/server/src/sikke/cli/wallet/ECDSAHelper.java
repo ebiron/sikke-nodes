@@ -130,7 +130,7 @@ public class ECDSAHelper {
 		// to check private key is correct
 		ECPrivateKey epvt = (ECPrivateKey) privKey;
 		String sepvt = adjustTo64(epvt.getS().toString(16));
-		System.out.println(sepvt);
+		//System.out.println(sepvt);
 
 		return privKey;
 	}
@@ -159,7 +159,7 @@ public class ECDSAHelper {
 
 		byte[] pub_key = ecKeyHelper.publicKeyFromPrivate(priv_big_integer, false);
 		String str_pub_key = AppHelper.toHexString(pub_key).substring(2);
-		System.out.println(str_pub_key);
+		//System.out.println(str_pub_key);
 
 		return str_pub_key;
 	}
@@ -170,7 +170,7 @@ public class ECDSAHelper {
 		ecdsaSign.initSign(privKey);
 		ecdsaSign.update(str.getBytes("UTF-8"));
 		byte[] signature = ecdsaSign.sign();
-		System.out.println(new BigInteger(1, signature).toString(16));
+		//System.out.println(new BigInteger(1, signature).toString(16));
 
 		String sign = new BigInteger(1, signature).toString(16);
 
@@ -183,7 +183,7 @@ public class ECDSAHelper {
 		ecdsaVerify.initVerify(publicKey);
 		ecdsaVerify.update(str.getBytes("UTF-8"));
 		boolean verify = ecdsaVerify.verify(signature);
-		System.out.println(verify);
+		//System.out.println(verify);
 		return verify;
 	}
 

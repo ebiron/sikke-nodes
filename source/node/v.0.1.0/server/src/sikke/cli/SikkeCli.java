@@ -5,18 +5,7 @@
  */
 package sikke.cli;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.annotations.SerializedName;
-import com.sun.net.httpserver.HttpServer;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.awt.AWTException;
-import java.awt.CheckboxMenuItem;
 import java.awt.Image;
 import java.awt.Menu;
 import java.awt.MenuItem;
@@ -25,21 +14,12 @@ import java.awt.SystemTray;
 import java.awt.TrayIcon;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
-import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Scanner;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -49,15 +29,12 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
-import static javax.swing.filechooser.FileSystemView.getFileSystemView;
+import com.sun.net.httpserver.HttpServer;
+
 import sikke.cli.defs.User;
 import sikke.cli.helpers.Helpers;
-import sikke.cli.helpers.Methods;
 import sikke.cli.helpers.SikkeConstant;
 import sikke.cli.helpers._System;
-
-import static sikke.cli.helpers._System.helper;
-import static sikke.cli.helpers._System.system;
 
 public class SikkeCli {
 
@@ -65,6 +42,7 @@ public class SikkeCli {
 	public static _System system = new _System();
 
 	public static void main(String[] args) throws IOException, Exception, FileNotFoundException {
+		Thread.currentThread().setName("Sikke Main Thread");
 		List<User> userList = new ArrayList<>();
 		system.initApp();
 		String error = "";
@@ -72,16 +50,16 @@ public class SikkeCli {
 		try {
 			system.getActiveUsers(null, userList);
 			if (userList.size() == 1) {
-				system.shouldThreadContinueToWork = true;
+				_System.shouldThreadContinueToWork = true;
 			} else {
-				system.shouldThreadContinueToWork = false;
+				_System.shouldThreadContinueToWork = false;
 			}
-			int port = Integer.parseInt(system.getConf("rpcport")) > 999 ? Integer.parseInt(system.getConf("rpcport"))
-					: -1;
-			system.port = port;
-			String sikkeServer = system.getConf("server");
-			String rpcUser = system.getConf("rpcuser");
-			String rpcPw = system.getConf("rpcpassword");
+			String strPort = _System.getConfig("rpcport").get(0);
+			int port = Integer.parseInt(strPort) > 999 ? Integer.parseInt(strPort) : -1;
+
+			String sikkeServer = _System.getConfig("server").get(0);
+			String rpcUser = _System.getConfig("rpcuser").get(0);
+			String rpcPw = _System.getConfig("rpcpassword").get(0);
 
 			error = sikkeServer.equals("-") ? "server required!\n" : "";
 			error += rpcUser.equals("-") ? "rpcuser required!\n" : "";
@@ -90,11 +68,10 @@ public class SikkeCli {
 
 			if (error.isEmpty()) {
 				HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-				System.out.println("> Sikke server started at port number: " + port);
-			
+				System.out.println("> Sikke Node Server started at port number: " + port);
 				server.createContext("/serverStatus", new RootHandler());
-		server.createContext("/newTransaction", new EchoTransactionHandler());
-				server.createContext("/", new EchoPostHandler());				
+				server.createContext("/newTransaction", new EchoTransactionHandler());
+				server.createContext("/", new EchoPostHandler());
 				server.setExecutor(null);
 				server.start();
 				initSystemTray();
@@ -108,19 +85,13 @@ public class SikkeCli {
 			e.printStackTrace();
 		}
 
-		final Timer timer = new Timer();
+		final Timer timer = new Timer("Sikke Timer Task");
 		long delay = SikkeConstant.THREAD_DELAY;
 		long intervalPeriod = SikkeConstant.INTERVAL_PERIOD;
 		TimerTask task = new TimerTask() {
 			@Override
 			public void run() {
-				if (system.shouldThreadContinueToWork) {
-					long currentDateTime = System.currentTimeMillis();
-					Date currentDate = new Date(currentDateTime);
-					DateFormat df = new SimpleDateFormat("dd.MM.yy-HH:mm:ss");
-
-					// System.out.println("> Sikke Timer Thread Invoked, the Time : " +
-					// df.format(currentDate));
+				if (_System.shouldThreadContinueToWork) {
 					try {
 						new EchoPostHandler().jsonrpc.methods.syncTx();
 					} catch (Exception e) {
@@ -131,12 +102,13 @@ public class SikkeCli {
 			}
 		};
 		timer.scheduleAtFixedRate(task, delay, intervalPeriod);
+
 	}
 
 	private static void initSystemTray() {
 		try {
-			UIManager.setLookAndFeel("com.sun.java.swing.plaf.windows.WindowsLookAndFeel");
-			// UIManager.setLookAndFeel("javax.swing.plaf.metal.MetalLookAndFeel");
+			// UIManager.setLookAndFeel("com.sun.java.swing.plaf.windows.WindowsLookAndFeel");
+			UIManager.setLookAndFeel("javax.swing.plaf.metal.MetalLookAndFeel");
 		} catch (UnsupportedLookAndFeelException ex) {
 			ex.printStackTrace();
 		} catch (IllegalAccessException ex) {
@@ -161,6 +133,7 @@ public class SikkeCli {
 			final TrayIcon trayIcon = new TrayIcon(createImage("/sikke24.gif", "Sikke Node "));
 			trayIcon.setImageAutoSize(true);
 			final SystemTray tray = SystemTray.getSystemTray();
+			final int port = Integer.parseInt(_System.getConfig("rpcport").get(0));
 
 			// Create a popup menu components
 			MenuItem aboutItem = new MenuItem("About");
@@ -189,14 +162,14 @@ public class SikkeCli {
 			trayIcon.addActionListener(new ActionListener() {
 				public void actionPerformed(ActionEvent e) {
 					JOptionPane.showMessageDialog(null,
-							"Server started successfully. The server works on port number:" + new _System().port);
+							"Server started successfully. The server works on port number:" + port);
 				}
 			});
 
 			aboutItem.addActionListener(new ActionListener() {
 				public void actionPerformed(ActionEvent e) {
 					JOptionPane.showMessageDialog(null,
-							"Server started successfully. The server works on port number:" + new _System().port);
+							"Server started successfully. The server works on port number:" + port);
 				}
 			});
 
@@ -227,8 +200,7 @@ public class SikkeCli {
 					}
 				}
 			};
-			trayIcon.displayMessage("Sikke Node Server",
-					"Sikke Node Server started successfully on port : " + new _System().port,
+			trayIcon.displayMessage("Sikke Node Server", "Sikke Node Server started successfully on port : " + port,
 					TrayIcon.MessageType.INFO);
 
 			infoItem.addActionListener(listener);
@@ -244,7 +216,6 @@ public class SikkeCli {
 
 	protected static Image createImage(String path, String description) {
 		URL imageURL = SikkeCli.class.getResource(path);
-
 		if (imageURL == null) {
 			System.err.println("Resource not found: " + path);
 			return null;

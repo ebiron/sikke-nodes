@@ -7,6 +7,8 @@ package sikke.cli.helpers;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -65,8 +67,7 @@ public class Helpers {
 	}
 
 	public String sendPost(String path, String urlParameters, String requestType) throws Exception {
-		String server = system.getConf("server");
-		String url = server.equals("1") ? "http://api.sikke.network" : "http://testnet.sikke.network";
+		String url = getServerUrl();
 		url += path;
 		StringBuilder response = new StringBuilder();
 		URL obj = new URL(url);
@@ -97,17 +98,18 @@ public class Helpers {
 		return response.toString();
 	}
 
-	public String sendGet(String path, String getQuery) throws Exception {
-		String server = system.getConf("server");
-		String url = server.equals("1") ? "http://api.sikke.network" : "http://testnet.sikke.network";
+	public String sendGet(String path, String getQuery, String accessToken) throws Exception {
+		String url = getServerUrl();
 		url += path + getQuery;
 
 		URL obj = new URL(url);
 		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-		con.setRequestMethod("GET");
+		if (accessToken != null) {
+			con.setRequestProperty("Authorization", "Bearer " + accessToken);
+		}
 		con.setRequestProperty("User-Agent", USER_AGENT);
-		int responseCode = con.getResponseCode();
-		//System.out.println("\nSending 'GET' request.\n Response code : " + responseCode);
+		con.setRequestMethod("GET");
+
 		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
 		String inputLine;
 		StringBuffer response = new StringBuffer();
@@ -116,6 +118,12 @@ public class Helpers {
 		}
 		in.close();
 		return response.toString();
+	}
+
+	public String getServerUrl() throws FileNotFoundException, IOException {
+		String server = system.getConfig("server").get(0);
+		String url = server.equals("1") ? "http://api.sikke.network" : "http://testnet.sikke.network";
+		return url;
 	}
 
 	private static SSLSocketFactory createSslSocketFactory() throws Exception {

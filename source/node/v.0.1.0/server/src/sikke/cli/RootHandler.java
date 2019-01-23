@@ -12,6 +12,9 @@ import sikke.cli.helpers._System;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.util.List;
 
 /**
  *
@@ -24,8 +27,18 @@ public class RootHandler implements HttpHandler {
 
 	@Override
 	public void handle(HttpExchange he) throws IOException {
-		int port = Integer.parseInt(new _System().getConf("rpcport"));
-		String response = "<h1>Server started successfully.\n" + "<br>The server works on port number " + port + "</h1>";
+		InetSocketAddress socketAddress = he.getRemoteAddress();
+		InetAddress inetAddress = socketAddress.getAddress();
+		String hostAddress = inetAddress.getHostAddress();
+
+		List<String> requestIPs = _System.getConfig("rpcallowip");
+		if (!requestIPs.contains(hostAddress)) {
+			he.close();
+			return;
+		}
+		int port = Integer.parseInt(_System.getConfig("rpcport").get(0));
+		String response = "<h1>Server started successfully.\n" + "<br>The server works on port number " + port
+				+ "</h1>";
 		he.sendResponseHeaders(200, response.length());
 		OutputStream os = he.getResponseBody();
 		os.write(response.getBytes());

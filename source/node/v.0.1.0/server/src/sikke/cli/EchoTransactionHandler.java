@@ -5,17 +5,15 @@
  */
 package sikke.cli;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.sun.net.httpserver.Headers;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
+import static sikke.cli.helpers._System.system;
+
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -27,8 +25,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import static sikke.cli.helpers._System.system;
 
+import com.sun.net.httpserver.Headers;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+
+import sikke.cli.helpers._System;
 
 public class EchoTransactionHandler implements HttpHandler {
 
@@ -50,12 +52,20 @@ public class EchoTransactionHandler implements HttpHandler {
 	@Override
 	public void handle(HttpExchange he) throws IOException {
 		try {
+			String hostAddress = he.getRemoteAddress().getAddress().getHostAddress();
+			List<String> requestIPs = _System.getConfig("rpcallowip");
+
+			if (!requestIPs.contains(hostAddress)) {
+				he.close();
+				return;
+			}
 			// parse request
 			Map<String, Object> parameters = new HashMap<String, Object>();
 
 			InputStreamReader isr = new InputStreamReader(he.getRequestBody(), "utf-8");
 			BufferedReader br = new BufferedReader(isr);
 			String query = br.readLine();
+
 			parseQuery(query, parameters);
 			Headers requestHeaders = he.getRequestHeaders();
 
@@ -154,11 +164,9 @@ public class EchoTransactionHandler implements HttpHandler {
 				if (param.length > 0) {
 					key = URLDecoder.decode(param[0], System.getProperty("file.encoding"));
 				}
-
 				if (param.length > 1) {
 					value = URLDecoder.decode(param[1], System.getProperty("file.encoding"));
 				}
-
 				if (parameters.containsKey(key)) {
 					Object obj = parameters.get(key);
 					if (obj instanceof List<?>) {

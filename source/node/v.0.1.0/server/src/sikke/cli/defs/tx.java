@@ -24,7 +24,7 @@ public class tx {
 	public int type;
 	public int seq;
 	public String wallet;
-	public String confirmRate;
+	public String confirm_rate;
 	public String block;
 	public String group;
 
@@ -34,7 +34,7 @@ public class tx {
 				+ amount + ", asset=" + asset + ", desc=" + desc + ", fee=" + fee + ", fee_asset=" + fee_asset
 				+ ", hash=" + hash + ", nonce=" + nonce + ", prev_hash=" + prev_hash + ", status=" + status
 				+ ", subtype=" + subtype + ", to=" + to + ", type=" + type + ", seq=" + seq + ", wallet=" + wallet
-				+ ", confirmRate=" + confirmRate + ", block=" + block + ", group=" + group + "]";
+				+ ", confirmRate=" + confirm_rate + ", block=" + block + ", group=" + group + "]";
 	}
 
 }

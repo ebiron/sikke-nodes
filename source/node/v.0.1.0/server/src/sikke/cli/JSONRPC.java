@@ -6,14 +6,14 @@
 package sikke.cli;
 
 import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+
 import sikke.cli.helpers.Methods;
 
 /**
  *
  * @author mumbucoglu
  */
-class JSONRPC {
+class JsonRpc {
 
 	Methods methods = new Methods();
 
@@ -27,8 +27,8 @@ class JSONRPC {
 		case "createWalletAndSave":
 			rs = methods.createWalletAndSave(params);
 			break;
-		case "syncWallet":
-			rs = methods.syncWallet(params);
+		case "syncWallets":
+			rs = methods.syncWallets(params, null);
 			break;
 		case "getHistories":
 			rs = methods.getHistories(params);
@@ -37,7 +37,7 @@ class JSONRPC {
 			rs = methods.listWallets(params);
 			break;
 		case "getBalances":
-			rs = methods.getBalance(params);
+			rs = methods.getBalances(params);
 			break;
 		case "send":
 			rs = methods.send(params);
@@ -77,6 +77,9 @@ class JSONRPC {
 			break;
 		case "importWallets":
 			rs = methods.importWallets(params);
+			break;
+		case "getTransactions":
+			rs = methods.getTransactions(params);
 			break;
 		default:
 			result = "Invalid method!";

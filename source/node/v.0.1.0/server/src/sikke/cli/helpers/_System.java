@@ -5,6 +5,8 @@
  */
 package sikke.cli.helpers;
 
+import static javax.swing.filechooser.FileSystemView.getFileSystemView;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -14,8 +16,6 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -24,21 +24,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Scanner;
 
 import javax.swing.filechooser.FileSystemView;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-
-import static javax.swing.filechooser.FileSystemView.getFileSystemView;
-import static sikke.cli.SikkeCli.helper;
 import sikke.cli.defs.User;
-import sikke.cli.wallet.AES256Cipher;
-import sikke.cli.wallet.AppHelper;
-import sikke.cli.wallet.WalletKey;
+import sikke.cli.defs.wallet;
 
 /**
  *
@@ -48,27 +40,53 @@ public class _System {
 
 	public static Helpers helper = new Helpers();
 	public static _System system = new _System();
+
 	static public boolean shouldThreadContinueToWork = true;
-	static public int port = 0;
+	public static boolean isWalletCreated = false;
+	public static HashMap<String, List<String>> configMap = null;
+	static HashMap<wallet, Integer> hmap = null;
 
 	public void initApp() throws FileNotFoundException, UnsupportedEncodingException, Exception {
 		initFolder();
-		// initUser();
+		getConfigsFromFile();
+	}
+
+	private void getConfigsFromFile() throws Exception {
+		configMap = new HashMap<>();
+		BufferedReader br = null;
+		FileInputStream fstream = null;
+		try {
+			String conf = getPath() + "sikke.conf";
+			fstream = new FileInputStream(conf);
+			br = new BufferedReader(new InputStreamReader(fstream));
+			String strLine;
+			while ((strLine = br.readLine()) != null) {
+				String[] flag = strLine.split("=");
+				String confKey = flag[0];
+				String confValue = flag[1];
+				List<String> values = configMap.get(confKey);
+				if (values == null) {
+					values = new ArrayList<>();
+				}
+				values.add(confValue);
+				configMap.put(confKey, values);
+			}
+		} catch (FileNotFoundException e) {
+			throw new Exception(e);
+		} catch (IOException e) {
+			throw new Exception(e);
+		} finally {
+			br.close();
+			fstream.close();
+		}
+	}
+
+	public static List<String> getConfig(String param) {
+		return configMap.get(param);
 	}
 
 	public String getOS(String property) {
 		return System.getProperty(property);
-	}
-
-	public Connection connect() {
-		String url = system.getDB();
-		Connection conn = null;
-		try {
-			conn = DriverManager.getConnection(url);
-		} catch (SQLException e) {
-			System.out.println(e.getMessage());
-		}
-		return conn;
 	}
 
 	private void initFolder() throws FileNotFoundException, Exception {
@@ -97,11 +115,9 @@ public class _System {
 	public void getActiveUsers(Connection conn, List<User> userList) throws Exception {
 		String sql = "select * from system_user where is_user_logged_in = 1";
 		User user = null;
-		boolean isConnectionNull = false;
 		try {
 			if (conn == null) {
-				isConnectionNull = true;
-				conn = this.connect();
+				conn = Connect.getConnect();
 			}
 			Statement stmt = conn.createStatement();
 			ResultSet rs = stmt.executeQuery(sql);
@@ -124,37 +140,20 @@ public class _System {
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new Exception(e);
-		} finally {
-			if (conn != null) {
-				if (isConnectionNull) {
-					conn.close();
-				}
-			}
 		}
 	}
 
 	public void disableAllUserLoginStatus(Connection conn) throws Exception {
-		boolean isConnectionNull = false;
 		Statement stmt = null;
 		try {
 			if (conn == null) {
-				isConnectionNull = true;
-				conn = this.connect();
+				conn = Connect.getConnect();
 			}
 			String sql = "update system_user set is_user_logged_in = 0";
 			stmt = conn.createStatement();
 			stmt.executeUpdate(sql);
 		} catch (Exception e) {
 			throw new Exception(e);
-		} finally {
-			if (conn != null) {
-				if (isConnectionNull) {
-					conn.close();
-				}
-			}
-			if (stmt != null) {
-				stmt.close();
-			}
 		}
 	}
 
@@ -206,7 +205,7 @@ public class _System {
 				writer.println("rpcuser=default_user");
 				writer.println("rpcpassword=default_password");
 				writer.println("rpcport=9090");
-				writer.println("rpallowip=*");
+				writer.println("rpcallowip=127.0.0.1");
 				writer.close();
 			}
 			createNewDatabase(getPath() + "wallets.dat");
@@ -231,7 +230,7 @@ public class _System {
 	}
 
 	public String getIP() throws IOException {
-		String port = getConf("rpcport");
+		String port = getConfig("rpcport").get(0);
 		URL whatismyip = new URL("http://checkip.amazonaws.com");
 		BufferedReader in = new BufferedReader(new InputStreamReader(whatismyip.openStream()));
 		String ip = in.readLine();
@@ -239,7 +238,7 @@ public class _System {
 	}
 
 	public String getCallbackURL() throws IOException {
-		String port = getConf("rpcport");
+		String port = getConfig("rpcport").get(0);
 		return getIP() + ":" + port + "/newTransaction";
 	}
 
@@ -259,7 +258,7 @@ public class _System {
 	public static void createTables() throws Exception {
 		String system_user = "CREATE TABLE IF NOT EXISTS system_user( id INTEGER PRIMARY KEY NOT NULL, user_id TEXT NOT NULL UNIQUE, access_token TEXT, alias_name TEXT, email TEXT NOT NULL, expires_in INT, name TEXT, refresh_token TEXT, rt_expires_in INT, surname TEXT, token_type TEXT, capacity REAL, crypt_key TEXT, crypt_iv TEXT, encrypted_password TEXT, is_user_logged_in BOOLEAN NOT NULL DEFAULT (0)); ";
 		String tx = "CREATE TABLE IF NOT EXISTS tx( id INTEGER PRIMARY KEY, _id INTEGER UNIQUE, seq INTEGER, amount TEXT, fee TEXT, fee_asset STRING, hash TEXT, prev_hash TEXT, nonce TEXT, _from TEXT, _to TEXT, asset TEXT, action_time TEXT, completion_time TEXT, confirm_rate INTEGER, [desc] TEXT, [group] STRING, status INTEGER, type INTEGER, subtype INTEGER); ";
-		String wallets = "CREATE TABLE IF NOT EXISTS wallets( id INTEGER PRIMARY KEY, address TEXT NOT NULL UNIQUE, email TEXT, label TEXT, private_key TEXT, public_key TEXT, limit_hourly TEXT, limit_daily TEXT, callback_url STRING, contract_token STRING, limit_max_amount TEXT, is_default INTEGER); ";
+		String wallets = "CREATE TABLE IF NOT EXISTS wallets( id INTEGER PRIMARY KEY, address TEXT NOT NULL UNIQUE, email TEXT, label TEXT, private_key TEXT, public_key TEXT, limit_hourly TEXT, limit_daily TEXT, limit_max_amount TEXT, callback_url STRING, contract_token STRING, is_default INTEGER); ";
 		String outdatedWallet = "CREATE TABLE IF NOT EXISTS outdated_wallet( id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, address STRING NOT NULL, insert_date DATETIME DEFAULT (CURRENT_DATE) NOT NULL);";
 
 		helper.createTable(system_user);
@@ -268,20 +267,13 @@ public class _System {
 		helper.createTable(outdatedWallet);
 	}
 
-	public String getConf(String param) throws FileNotFoundException, IOException {
-		String conf = getPath() + "sikke.conf";
-		FileInputStream fstream = new FileInputStream(conf);
-		try (BufferedReader br = new BufferedReader(new InputStreamReader(fstream))) {
-			String strLine;
-			String value = null;
-			while ((strLine = br.readLine()) != null) {
-				String[] flag = strLine.split("=");
-
-				if (flag[0].equals(param)) {
-					value = flag[1];
-				}
-			}
-			return value != null ? value : "-";
-		}
-	}
+	/*
+	 * public String getConf(String param) throws FileNotFoundException, IOException
+	 * { String conf = getPath() + "sikke.conf"; FileInputStream fstream = new
+	 * FileInputStream(conf); try (BufferedReader br = new BufferedReader(new
+	 * InputStreamReader(fstream))) { String strLine; String value = null; while
+	 * ((strLine = br.readLine()) != null) { String[] flag = strLine.split("="); if
+	 * (flag[0].equals(param)) { value = flag[1]; } } return value != null ? value :
+	 * "-"; } }
+	 */
 }

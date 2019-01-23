@@ -62,7 +62,8 @@ public class AES256Cipher {
 		Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
 		cipher.init(Cipher.ENCRYPT_MODE, newKey, ivSpec);
 
-		String result = Base64.encodeToString(cipher.doFinal(plainText.getBytes(Charset.forName("UTF-8"))), Base64.NO_WRAP); 
+		String result = Base64.encodeToString(cipher.doFinal(plainText.getBytes(Charset.forName("UTF-8"))),
+				Base64.NO_WRAP);
 		return result;
 	}
 
@@ -89,7 +90,6 @@ public class AES256Cipher {
 	}
 
 	public static String encryptPvt(byte[] key, String message) throws Exception {
-
 		byte[] iv = AES256Cipher.getRandomAesCryptIv();
 		String encryptedData = AES256Cipher.encrypt(key, iv, message);
 		byte[] encryptedDataBytes = Base64.decode(encryptedData, Base64.DEFAULT);
