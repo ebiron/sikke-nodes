@@ -122,7 +122,8 @@ public class EchoPostHandler implements HttpHandler {
 			os.close();
 
 		} catch (Exception ex) {
-			Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, null, ex);
+			// System.out.println("An error occured : " + ex.getMessage());
+			Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
 		}
 	}
 

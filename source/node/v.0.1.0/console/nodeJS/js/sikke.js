@@ -16,21 +16,15 @@ var sikkeClient = new sikke.Client({
 
 var options = {
   keysColor: 'green',
-  dashColor: 'magenta', 
-   
+  dashColor: 'magenta',
+
 };
 
 const spinner = new Ora({
-  text: 'Processing your command. Please wait...',
+  text: 'Processing your command. Please wait...'.magenta,
   spinner: process.argv[2]
 });
 spinner.color = 'yellow';
-
-/*
-setTimeout(() => {
-  spinner.color = 'yellow';
-  spinner.text = 'Loading rainbows';
-}, 10000);*/
 
 
 var ops = stdio.getopt({});
@@ -54,87 +48,28 @@ if (ops.args == null) {
     sikkeClient.cmd(method, ...params, function (err, data) {
       if (!err) {
         spinner.succeed("Your transaction has been successfully completed.\n".green);
-        if (method == "help") {
-          console.log(prettyjson.render(data, options));
-          for (var item of data) {
-            console.log("  " + item.yellow);    
-
-          }
-          //  console.log(data);
-        } else {
-          console.log(prettyjson.render(data, options));
+        switch (method) {
+          case "help":
+            for (var item of data) {
+              console.log("  " + item.yellow);
+            }
+            break;
+          case "getTransactions":
+          case "createWalletAndSave":
+          case "createWallet":
+          case "getHistories":
+          case "send":
+            console.log(prettyjson.render(data, options));
+            break;
+          default:
+            console.table(data);
+            break;
         }
       } else {
-        spinner.fail("Your operation was not completed successfully. Error: " + err.red);
-        console.log("Your operation was not completed successfully. Error: " + err.red);
+        spinner.fail("Your operation was not completed successfully. Error: ".red + err);
       }
     })
   } else {
     console.log('You have entered an unknown command. Please see the help menu for help.'.red);
   }
 }
-
-
-
-
-/*
- * sikkeClient.cmd('repairTx', function(err, data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('createAccount', "parifix2", function(err, data) {
- * console.log(data) })
- */
-/*
- * sikkeClient.cmd('createAccountAndSave', "alias_name:sikke10",
- * "limit_hourly:100", "limit_daily:500", "limit_max_amount:1500", function(err,
- * data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('mergeBalance', function(err, data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('syncTx', function(err, data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('syncWallet',
- * "address:SKK1Lxh42NcQvsNEvspiALD2tenSCxdkRUisg", "limit_hourly:9000",
- * "limit_daily:90000", "limit_max_amount:200000", function(err, data) {
- * console.log(data) })
- */
-/*
- * sikkeClient.cmd('getTransactions', "seq:11", function(err, data) {
- * console.log(data) })
- */
-/*
- * sikkeClient.cmd('listAccounts', function(err, data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('getBalance', "SKK1P8fQ23UDua311wjc53zxsjvVQ4s6JcFnx",
- * function(err, data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('send', "from:SKK1KuAwe4kR1SfdoXDiQStVtRPvdTVaKy2ry",
- * "to:SKK1QGJeuVYm7zcs3JGjFZ6asgXsKrkUMDAbC", "amount:1", "desc:aqqq",
- * function(err, data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('importWallet',
- * "7rMnVkKaqAj7uDoGthqYUSGjHYYkFDw3FEeMT2CYCnqX", function(err, data) {
- * console.log(data) })
- */
-/*
- * sikkeClient.cmd('makeDefault', "SKK1KuAwe4kR1SfdoXDiQStVtRPvdTVaKy2ry",
- * function(err, data) { console.log(data) })
- */
-/*
- * sikkeClient.cmd('help', ,function(err, data) { console.log(data) })
- */
-
-
-/*
-if (method === 'test') {
-  sikkeClient.cmd(method, function(err, data) {
-    console.log(data)
-  })
-}
-*/

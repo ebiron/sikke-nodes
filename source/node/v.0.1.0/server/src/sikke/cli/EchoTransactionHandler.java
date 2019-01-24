@@ -30,23 +30,12 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
+import sikke.cli.helpers.Connect;
 import sikke.cli.helpers._System;
 
 public class EchoTransactionHandler implements HttpHandler {
 
 	public EchoTransactionHandler() {
-	}
-
-	private Connection connect() {
-		// SQLite connection string
-		String url = system.getDB();
-		Connection conn = null;
-		try {
-			conn = DriverManager.getConnection(url);
-		} catch (SQLException e) {
-			System.out.println(e.getMessage());
-		}
-		return conn;
 	}
 
 	@Override
@@ -55,7 +44,7 @@ public class EchoTransactionHandler implements HttpHandler {
 			String hostAddress = he.getRemoteAddress().getAddress().getHostAddress();
 			List<String> requestIPs = _System.getConfig("rpcallowip");
 
-			if (!requestIPs.contains(hostAddress)) {
+			if (!requestIPs.contains(hostAddress) || true) {
 				he.close();
 				return;
 			}
@@ -122,7 +111,7 @@ public class EchoTransactionHandler implements HttpHandler {
 			String sql = "INSERT INTO tx (_id, amount,fee,prev_hash,nonce,action_time,completion_time,_from,_to,asset,hash,seq,desc)"
 					+ "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)";
 			try {
-				Connection conn = this.connect();
+				Connection conn = Connect.getConnect();
 				PreparedStatement pstmt = conn.prepareStatement(sql);
 
 				pstmt.setString(1, _id);
@@ -149,7 +138,8 @@ public class EchoTransactionHandler implements HttpHandler {
 			os.write("ok".getBytes());
 			os.close();
 		} catch (Exception ex) {
-			Logger.getLogger(EchoPostHandler.class.getName()).log(Level.SEVERE, null, ex);
+			// System.out.println(ex.getMessage());
+			Logger.getLogger(EchoTransactionHandler.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
 		}
 	}
 

@@ -33,9 +33,10 @@ public class EchoGetHandler implements HttpHandler {
 
 	@Override
 	public void handle(HttpExchange he) throws IOException {
+		//Get ile istek alýnmadýðýndan kapalýdýr.
 		String hostAddress = he.getRemoteAddress().getAddress().getHostAddress();
 		List<String> requestIPs = _System.getConfig("rpcallowip");
-		if (!requestIPs.contains(hostAddress)) {
+		if (!requestIPs.contains(hostAddress) || true) {
 			he.close();
 			return;
 		}

@@ -8,12 +8,12 @@ module.exports = {
   createWallet: 'createWallet',
   createWalletAndSave: 'createWalletAndSave',
   listWallets: 'listWallets', 
-  syncWallet: 'syncWallet',
+  syncWallets: 'syncWallets',
   getHistories: 'getHistories', 
   mergeBalances: 'mergeBalances', 
   exportWallets: 'exportWallets',
   importWallets: 'importWallets',
+  getTransactions: 'getTransactions',
   send: 'send', 
-  help: 'help',
-  
+  help: 'help'  
 }

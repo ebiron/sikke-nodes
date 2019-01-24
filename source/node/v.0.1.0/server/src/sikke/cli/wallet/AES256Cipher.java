@@ -63,7 +63,7 @@ public class AES256Cipher {
 		cipher.init(Cipher.ENCRYPT_MODE, newKey, ivSpec);
 
 		String result = Base64.encodeToString(cipher.doFinal(plainText.getBytes(Charset.forName("UTF-8"))),
-				Base64.NO_WRAP);
+				Base64.DEFAULT);
 		return result;
 	}
 
@@ -76,7 +76,7 @@ public class AES256Cipher {
 		Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
 		cipher.init(Cipher.DECRYPT_MODE, newKey, ivSpec);
 
-		return new String(cipher.doFinal(Base64.decode(cipherText, Base64.NO_WRAP)), "UTF-8");
+		return new String(cipher.doFinal(Base64.decode(cipherText, Base64.DEFAULT)), "UTF-8");
 	}
 
 	public static byte[] key128Bit(String pin_code) throws Exception {

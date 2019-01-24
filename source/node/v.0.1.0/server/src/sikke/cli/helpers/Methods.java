@@ -210,14 +210,12 @@ public class Methods {
 	}
 
 	public JsonArray createWallet(String[] params) throws Exception {
-		String error = null;
 		JsonArray result = new JsonArray();
 		String aliasName = null;
 		Double limitHourly = null;
 		Double limitDaily = null;
 		Double limitMaxAmount = null;
 		String callbackUrl = null;
-		int isDefault = 0;
 		Connection conn = null;
 		User user = null;
 		try {
@@ -654,7 +652,6 @@ public class Methods {
 		Double limitMaxAmount = null;
 		String callbackUrl = null;
 		Connection conn = null;
-		int isDefault = 0;
 		try {
 			conn = Connect.getConnect();
 			if (params != null && params.length > 0) {
@@ -1430,13 +1427,13 @@ public class Methods {
 	private void insertOrUpdateTx(Connection con, tx tx) throws SQLException {
 		String sql;
 		sql = "insert into tx (_id,seq,amount,fee,fee_asset,hash,prev_hash,nonce,_from,_to,asset,action_time,completion_time,confirm_rate,[desc],[group],status,type,subtype) "
-				+ "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) on conflict (_id) do update set " + "amount ="
-				+ tx.amount + ",fee='" + tx.fee + "'" + ",fee_asset='" + tx.fee_asset + "'" + ",hash='" + tx.hash + "'"
-				+ ",prev_hash='" + tx.prev_hash + "'" + ",nonce='" + tx.nonce + "'" + ",action_time=" + tx.action_time
-				+ ",completion_time=" + tx.complete_time + ",_from='" + tx.wallet + "'" + ",_to='" + tx.to + "'"
-				+ ",asset='" + tx.asset + "'" + ",[group]=" + tx.group + ",seq=" + tx.seq + ",[desc]='" + tx.desc + "'"
-				+ ",confirm_rate=" + tx.confirm_rate + ",status=" + tx.status + ",type=" + tx.type + ",subtype="
-				+ tx.subtype;
+				+ "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) on conflict (_id) do update set " + "amount ='"
+				+ tx.amount +"'"+ ",fee='" + tx.fee + "'" + ",fee_asset='" + tx.fee_asset + "'" + ",hash='" + tx.hash + "'"
+				+ ",prev_hash='" + tx.prev_hash + "'" + ",nonce='" + tx.nonce + "'" + ",action_time='" + tx.action_time+"'"
+				+ ",completion_time='" + tx.complete_time +"'"+ ",_from='" + tx.wallet + "'" + ",_to='" + tx.to + "'"
+				+ ",asset='" + tx.asset + "'" + ",[group]='" + tx.group +"'"+ ",seq='" + tx.seq +"'"+ ",[desc]='" + tx.desc + "'"
+				+ ",confirm_rate='" + tx.confirm_rate +"'"+ ",status='" + tx.status +"'"+ ",type='" + tx.type+"'" + ",subtype='"
+				+ tx.subtype+"'";
 		PreparedStatement pstmt = con.prepareStatement(sql);
 		pstmt.setString(1, tx._id); // id
 		pstmt.setInt(2, tx.seq);// seq
@@ -1469,8 +1466,8 @@ public class Methods {
 		sql = "insert into wallets (address,email,label,private_key,public_key,limit_hourly,limit_daily,callback_url,contract_token,limit_max_amount,is_default) "
 				+ "values (?,?,?,?,?,?,?,?,?,?,?) on conflict (address) do update set " + "label='" + wallet.alias_name
 				+ "'" + ",private_key='" + wallet.privateKey + "'" + ",public_key='" + wallet.publicKey + "'"
-				+ ",limit_hourly='" + strLimitHourly + "'" + ",limit_daily='" + strLimitDaily + "'" + ",callback_url="
-				+ wallet.callback_url + ",contract_token=" + wallet.contract_token + ",limit_max_amount='"
+				+ ",limit_hourly='" + strLimitHourly + "'" + ",limit_daily='" + strLimitDaily + "'" + ",callback_url='"
+				+ wallet.callback_url +"'" +",contract_token='" + wallet.contract_token+"'" + ",limit_max_amount='"
 				+ strLimitMaxAmount + "'";
 		PreparedStatement pstmt = con.prepareStatement(sql);
 		pstmt.setString(1, wallet.address); // address
@@ -1720,7 +1717,7 @@ public class Methods {
 								SikkeConstant.YOU_HAVE_SUCCESSFULLY_REGISTERED_YOU_MUST_BE_LOGGED_IN_TO_USE_THE_SYSTEM);
 
 						WalletKey walletKey = WalletKey.getWalletKeys();
-						return createAccountAndSave(SikkeConstant.DEFAULT_WALLET, null, null, null, null, walletKey,
+						return createAccountAndSave(null, null, null, null, null, walletKey,
 								user, conn);
 					} else {
 						result.add(userResponse.message);
