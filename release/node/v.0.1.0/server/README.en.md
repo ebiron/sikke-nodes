@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 ﻿![enter image description here](https://wallet.sikke.com.tr/static/images/sikke_client_logo.jpg)
 # Welcome to Sikke Client
+=======
+![enter image description here](https://github.com/sikke-official/sikke-nodes/blob/master/docs/images/sikke_client_logo.jpg)
+# Welcome to Sikke Node
+>>>>>>> d0a2ee002688e1160af993fcb16be89c1eb6f383
 
 
 
