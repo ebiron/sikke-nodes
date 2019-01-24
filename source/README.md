@@ -61,11 +61,11 @@ You can run Sikke Node Console as follows;
   2. Go to the directory where the console folder is located and run
    ***for Windows***
 		> cd sikke-nodes\release\node\v.0.1.0\console\windows
-		>`sikke register email:test.mail@gmail.com password:123456`
+	sikke register email:test.mail@gmail.com password:123456
 		
 	 ***for Linux and MacOS***
 		> cd sikke-nodes\release\node\v.0.1.0\console\linux
-		>`./sikke register email:test.mail@gmail.com password:123456`
+	./sikke register email:test.mail@gmail.com password:123456
 
 	
 
