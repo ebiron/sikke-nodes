@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.sql.Connection;
@@ -26,6 +27,8 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import com.google.gson.Gson;
+
+import sikke.SikkeEnumContainer;
 
 /**
  *
@@ -74,7 +77,8 @@ public class Helpers {
 
 		try {
 			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-			con.setRequestMethod(requestType == null ? SikkeConstant.REQUEST_POST : requestType);
+			con.setRequestMethod(
+					requestType == null ? SikkeEnumContainer.HTTPRequestMethod.POST.getRequest() : requestType);
 			con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 			con.setRequestProperty("Accept-Language", USER_AGENT);
 			con.setDoOutput(true);
@@ -91,11 +95,16 @@ public class Helpers {
 				response.append(inputLine);
 			}
 			in.close();
-
+			_System.isAPIReachable = true;
+			return response.toString();
+		} catch (UnknownHostException e) {
+			_System.isAPIReachable = false;
+			throw e;
 		} catch (Exception e) {
+			_System.isAPIReachable = false;
 			e.printStackTrace();
+			throw e;
 		}
-		return response.toString();
 	}
 
 	public String sendGet(String path, String getQuery, String accessToken) throws Exception {
@@ -103,21 +112,31 @@ public class Helpers {
 		url += path + getQuery;
 
 		URL obj = new URL(url);
-		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-		if (accessToken != null) {
-			con.setRequestProperty("Authorization", "Bearer " + accessToken);
-		}
-		con.setRequestProperty("User-Agent", USER_AGENT);
-		con.setRequestMethod("GET");
+		try {
+			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+			if (accessToken != null) {
+				con.setRequestProperty("Authorization", "Bearer " + accessToken);
+			}
+			con.setRequestProperty("User-Agent", USER_AGENT);
+			con.setRequestMethod("GET");
 
-		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-		String inputLine;
-		StringBuffer response = new StringBuffer();
-		while ((inputLine = in.readLine()) != null) {
-			response.append(inputLine);
+			BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+			String inputLine;
+			StringBuffer response = new StringBuffer();
+			while ((inputLine = in.readLine()) != null) {
+				response.append(inputLine);
+			}
+			in.close();
+			_System.isAPIReachable = true;
+			return response.toString();
+		} catch (UnknownHostException e) {
+			_System.isAPIReachable = false;
+			throw e;
+		} catch (Exception e) {
+			e.printStackTrace();
+			_System.isAPIReachable = false;
+			throw e;
 		}
-		in.close();
-		return response.toString();
 	}
 
 	public String getServerUrl() throws FileNotFoundException, IOException {

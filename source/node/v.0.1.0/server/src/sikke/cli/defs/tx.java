@@ -8,8 +8,8 @@ package sikke.cli.defs;
 public class tx {
 
 	public String _id;
-	public long action_time;
-	public long complete_time;
+	public String action_time;
+	public String complete_time;
 	public double amount;
 	public String asset;
 	public String desc;
@@ -27,6 +27,8 @@ public class tx {
 	public String confirm_rate;
 	public String block;
 	public String group;
+	public int checked;
+	
 
 	@Override
 	public String toString() {

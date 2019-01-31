@@ -13,15 +13,11 @@ public class Connect {
 
 	private Connect() {
 		try {
-			// Class.forName("org.sqlite.JDBC");
 			connection = DriverManager.getConnection(url);
 		} catch (SQLException e) {
-			System.err.println("Impossible de se connecter a la database");
+			System.err.println("DB Connection Error : " + e.getStackTrace());
 			System.exit(0);
-		} /*
-			 * catch (ClassNotFoundException e) {
-			 * System.err.println("Impossible de charger les Driver"); System.exit(0); }
-			 */
+		}
 	}
 
 	public static Connection getConnect() {

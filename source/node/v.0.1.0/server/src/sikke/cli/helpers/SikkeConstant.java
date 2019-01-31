@@ -35,15 +35,12 @@ public class SikkeConstant {
 	public static final String SEPERATOR = ":";
 
 	public static final String DEFAULT_ASSET = "SKK";
-	// Request Types
-	public static final String REQUEST_POST = "POST";
-	public static final String REQUEST_PUT = "PUT";
-	public static final String REQUEST_GET = "GET";
 
 	public static final int QUERY_LIMIT = 100;
+	public static final int TX_QUERY_LIMIT = 3000;
 	public static final String MERGE_BALANCE_TEXT = "Merge balance operation";
 	public static final Object DOUBLE_UNDERSCORE = "__";
-	public static final long INTERVAL_PERIOD = 1000 * 10 * 1;
+	public static final long INTERVAL_PERIOD = 1000 * 60*2;
 	public static final long THREAD_DELAY = 0;
 
 	public static final String ALIAS_NAME = "alias_name";

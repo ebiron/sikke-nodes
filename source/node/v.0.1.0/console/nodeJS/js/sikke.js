@@ -66,7 +66,10 @@ if (ops.args == null) {
             break;
         }
       } else {
-        spinner.fail("Your operation was not completed successfully. Error: ".red + err);
+        console.log("Errorrrrrrr : " + err.code);
+        if(err.code==='ECONNREFUSED'){
+          spinner.fail("Your operation has failed. Error: ".red + "Sikke Node Server is not working now!To continue you must run Sikke Node Server.");
+        }        
       }
     })
   } else {

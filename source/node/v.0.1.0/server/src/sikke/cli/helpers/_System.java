@@ -29,6 +29,8 @@ import java.util.List;
 
 import javax.swing.filechooser.FileSystemView;
 
+import sikke.JsonRpcErrorObject;
+import sikke.JsonRpcObject;
 import sikke.cli.defs.User;
 import sikke.cli.defs.wallet;
 
@@ -42,13 +44,24 @@ public class _System {
 	public static _System system = new _System();
 
 	static public boolean shouldThreadContinueToWork = true;
-	public static boolean isWalletCreated = false;
+	// public static boolean isWalletCreated = false;
 	public static HashMap<String, List<String>> configMap = null;
-	static HashMap<wallet, Integer> hmap = null;
+	static int maxSequenceNumber = 0;
+	public static boolean isAPIReachable = false;
+	// static HashMap<wallet, Integer> hmap = null;
 
 	public void initApp() throws FileNotFoundException, UnsupportedEncodingException, Exception {
 		initFolder();
 		getConfigsFromFile();
+	}
+
+	public static JsonRpcObject isSikkeAPIReachable() {
+		JsonRpcObject jsonRpcObject = null;
+		if(!_System.isAPIReachable) {
+			jsonRpcObject = new JsonRpcObject();
+			jsonRpcObject.error = new JsonRpcErrorObject(0, "Sikke API does not response");
+		}
+		return jsonRpcObject;
 	}
 
 	private void getConfigsFromFile() throws Exception {
@@ -112,7 +125,8 @@ public class _System {
 		}
 	}
 
-	public void getActiveUsers(Connection conn, List<User> userList) throws Exception {
+	public void getActiveUsers(List<User> userList) throws Exception {
+		Connection conn = null;
 		String sql = "select * from system_user where is_user_logged_in = 1";
 		User user = null;
 		try {
@@ -143,12 +157,11 @@ public class _System {
 		}
 	}
 
-	public void disableAllUserLoginStatus(Connection conn) throws Exception {
+	public void disableAllUserLoginStatus() throws Exception {
 		Statement stmt = null;
+		Connection conn = null;
 		try {
-			if (conn == null) {
-				conn = Connect.getConnect();
-			}
+			conn = Connect.getConnect();
 			String sql = "update system_user set is_user_logged_in = 0";
 			stmt = conn.createStatement();
 			stmt.executeUpdate(sql);
@@ -257,7 +270,7 @@ public class _System {
 
 	public static void createTables() throws Exception {
 		String system_user = "CREATE TABLE IF NOT EXISTS system_user( id INTEGER PRIMARY KEY NOT NULL, user_id TEXT NOT NULL UNIQUE, access_token TEXT, alias_name TEXT, email TEXT NOT NULL, expires_in INT, name TEXT, refresh_token TEXT, rt_expires_in INT, surname TEXT, token_type TEXT, capacity REAL, crypt_key TEXT, crypt_iv TEXT, encrypted_password TEXT, is_user_logged_in BOOLEAN NOT NULL DEFAULT (0)); ";
-		String tx = "CREATE TABLE IF NOT EXISTS tx( id INTEGER PRIMARY KEY, _id INTEGER UNIQUE, seq INTEGER, amount TEXT, fee TEXT, fee_asset STRING, hash TEXT, prev_hash TEXT, nonce TEXT, _from TEXT, _to TEXT, asset TEXT, action_time TEXT, completion_time TEXT, confirm_rate INTEGER, [desc] TEXT, [group] STRING, status INTEGER, type INTEGER, subtype INTEGER); ";
+		String tx = "CREATE TABLE IF NOT EXISTS tx( id INTEGER PRIMARY KEY, _id VARCHAR UNIQUE, seq INTEGER, amount VARCHAR, fee VARCHAR, fee_asset VARCHAR, hash VARCHAR, prev_hash VARCHAR, nonce VARCHAR, _from VARCHAR, _to VARCHAR, asset VARCHAR, action_time VARCHAR, completion_time VARCHAR, confirm_rate VARCHAR, [desc] VARCHAR, [group] INTEGER, status INTEGER, type INTEGER, subtype INTEGER); ";
 		String wallets = "CREATE TABLE IF NOT EXISTS wallets( id INTEGER PRIMARY KEY, address TEXT NOT NULL UNIQUE, email TEXT, label TEXT, private_key TEXT, public_key TEXT, limit_hourly TEXT, limit_daily TEXT, limit_max_amount TEXT, callback_url STRING, contract_token STRING, is_default INTEGER); ";
 		String outdatedWallet = "CREATE TABLE IF NOT EXISTS outdated_wallet( id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, address STRING NOT NULL, insert_date DATETIME DEFAULT (CURRENT_DATE) NOT NULL);";
 

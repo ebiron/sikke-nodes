@@ -16,12 +16,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Pattern;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -31,6 +31,10 @@ import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 
+import sikke.EchoPostHandler;
+import sikke.JsonRpcErrorObject;
+import sikke.JsonRpcObject;
+import sikke.SikkeEnumContainer;
 import sikke.cli.defs.TxResponse;
 import sikke.cli.defs.User;
 import sikke.cli.defs.UserResponse;
@@ -50,16 +54,19 @@ import sikke.cli.wallet.WalletKey;
 public class Methods {
 
 	Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	static Logger logger = Logger.getLogger(EchoPostHandler.class.getName());
 
-	public JsonArray getHistories(String[] params) throws Exception {
+	public JsonRpcObject getHistories(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String whereClause = "";
 		JsonArray result = new JsonArray();
 		Connection conn = null;
 		String sql = null;
 		try {
 			conn = Connect.getConnect();
-			if (getOnlyActiveUser(result, conn) == null) {
-				return result;
+			if (getOnlyActiveUser() == null) {
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			if (params != null && params.length == 1) {
 				String param = params[0];
@@ -76,8 +83,9 @@ public class Methods {
 					} else if (key.equals(SikkeConstant.TX_QUERY_TYPE_BLOCK)) {
 						whereClause = "  t.block = '" + value + "'";
 					} else {
-						result.add("Unknown query type.Available queries; [address,hash,seq,block]:value");
-						return result;
+						jsonRpcObject.error = new JsonRpcErrorObject(1,
+								"Unknown query type.Available queries; [address,hash,seq,block]:value");
+						return jsonRpcObject;
 					}
 				}
 				sql = "SELECT * FROM tx t, wallets w,system_user u where u.email = w.email and w.address = t._from and u.is_user_logged_in = 1 and "
@@ -111,32 +119,27 @@ public class Methods {
 				jo.addProperty("wallet", rs.getString("_from"));
 				result.add(jo);
 			}
-
+			jsonRpcObject.result = result;
 		} catch (SQLException e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		JsonObject tx = new JsonObject();
-		tx.add("", result.getAsJsonArray());
-		return result;
+		return jsonRpcObject;
 	}
 
-	public User getOnlyActiveUser(JsonArray result, Connection conn) throws Exception {
+	public User getOnlyActiveUser() throws Exception {
 		List<User> userList = new ArrayList<>();
 		User user = null;
-		system.getActiveUsers(conn, userList);
-		if (userList.size() == 0) {
-			result.add(SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
-		} else if (userList.size() == 1) {
+		system.getActiveUsers(userList);
+		if (userList.size() == 1) {
 			user = userList.get(0);
 		} else if (userList.size() > 1) {
-			system.disableAllUserLoginStatus(conn);
-			result.add(SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+			system.disableAllUserLoginStatus();
 		}
 		return user;
 	}
@@ -165,13 +168,15 @@ public class Methods {
 		return user;
 	}
 
-	public JsonArray listWallets(String[] params) throws Exception {
-		JsonArray result = new JsonArray();
+	public JsonRpcObject listWallets(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
+		JsonArray array = new JsonArray();
 		Connection conn = null;
 		try {
 			conn = Connect.getConnect();
-			if (getOnlyActiveUser(result, conn) == null) {
-				return result;
+			if (getOnlyActiveUser() == null) {
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			String sql = "SELECT w.*, ifnull(a.asset, 'SKK') asset, ifnull(a.balance, 0) balance FROM system_user u, wallets w LEFT JOIN( SELECT t._from, t.asset, round(ifnull(sum(t.amount), 0), 8) AS balance FROM wallets w, tx t WHERE w.address = t._from GROUP BY t._from, t.asset) a ON w.address = a._from WHERE u.email = w.email AND u.is_user_logged_in = 1 ORDER BY w.address;  ";
 			Statement stmt = conn.createStatement();
@@ -198,31 +203,32 @@ public class Methods {
 					jo.addProperty("limit_hourly", rs.getString("limit_hourly"));
 					jo.addProperty("limit_max_amount", rs.getString("limit_max_amount"));
 					jo.addProperty("is_default", rs.getBoolean("is_default"));
-					result.add(jo);
+					array.add(jo);
 				}
 				prevAddress = address;
 			}
+			jsonRpcObject.result = array;
 		} catch (SQLException e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
+			jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray createWallet(String[] params) throws Exception {
-		JsonArray result = new JsonArray();
+	public JsonRpcObject createWallet(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String aliasName = null;
 		Double limitHourly = null;
 		Double limitDaily = null;
 		Double limitMaxAmount = null;
 		String callbackUrl = null;
-		Connection conn = null;
 		User user = null;
 		try {
-			conn = Connect.getConnect();
-			user = getOnlyActiveUser(result, conn);
+			user = getOnlyActiveUser();
 			if (user == null) {
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			if (params != null && params.length > 0) {
 				for (int i = 0; i < params.length; i++) {
@@ -244,27 +250,24 @@ public class Methods {
 				}
 			}
 			WalletKey walletKey = WalletKey.getWalletKeys();
-			result = createWallet(aliasName, limitHourly, limitDaily, limitMaxAmount, callbackUrl, walletKey, user,
-					conn);
-			if (result != null) {
-				_System.isWalletCreated = true;
-			}
-			return result;
+			JsonArray result = createWallet(aliasName, limitHourly, limitDaily, limitMaxAmount, callbackUrl, walletKey,
+					user);
+			jsonRpcObject.result = result;
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
+		return jsonRpcObject;
 	}
 
 	public JsonArray createWallet(String label, Double limitHourly, Double limitDaily, Double limitMaxAmount,
-			String callbackUrl, WalletKey walletKey, User user, Connection conn) {
+			String callbackUrl, WalletKey walletKey, User user) {
 		JsonArray result = null;
 		JsonObject jo = null;
+		Connection conn = null;
 		try {
-			if (conn == null) {
-				conn = Connect.getConnect();
-			}
+			conn = Connect.getConnect();
 			String email = user.email;
 			String sql = "INSERT INTO wallets (address,email,label,private_key,public_key,is_default,limit_hourly,limit_daily,limit_max_amount,callback_url) VALUES(?,?,?,?,?,?,?,?,?,?)";
 			String strLimitHourly = limitHourly == null ? "" : String.valueOf(limitHourly);
@@ -303,15 +306,17 @@ public class Methods {
 		return result;
 	}
 
-	public JsonArray getBalances(String[] params) throws Exception {
+	public JsonRpcObject getBalances(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String sql;
 		String whereClause = "";
 		JsonArray result = new JsonArray();
 		Connection conn = null;
 		try {
 			conn = Connect.getConnect();
-			if (getOnlyActiveUser(result, conn) == null) {
-				return result;
+			if (getOnlyActiveUser() == null) {
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			if (params != null && params.length > 0) {
 				int paramsLength = params.length;
@@ -357,16 +362,17 @@ public class Methods {
 				}
 				prevAddress = address;
 			}
+			jsonRpcObject.result = result;
 		} catch (SQLException e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray send(String[] params) throws Exception {
-		String error = "";
+	public JsonRpcObject send(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String sql = null;
 		JsonArray result = new JsonArray();
 		String from = null;
@@ -379,18 +385,17 @@ public class Methods {
 		int hidden = 0;
 		Gson g = new Gson();
 		Connection conn = null;
-		User user = null;
 
 		try {
 			conn = Connect.getConnect();
-			user = getOnlyActiveUser(result, conn);
-			if (user == null) {
-				return result;
+			if (getOnlyActiveUser() == null) {
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			if (params == null || params.length < 2) {
-				error = "Insufficient parameter set";
-				result.add(error);
-				return result;
+
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "Insufficient parameter set");
+				return jsonRpcObject;
 			}
 			for (int i = 0; i < params.length; i++) {
 				String param = params[i];
@@ -413,14 +418,12 @@ public class Methods {
 				}
 			}
 			if (to == null) {
-				error = "Address to be sent cannot bu empty";
-				result.add(error);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "Address to be sent cannot bu empty");
+				return jsonRpcObject;
 			}
 			if (amount <= 0) {
-				error = "Amount must be greater than (0)zero";
-				result.add(error);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "Amount must be greater than (0)zero");
+				return jsonRpcObject;
 			}
 			if (asset == null) {
 				asset = SikkeConstant.DEFAULT_ASSET;
@@ -434,9 +437,8 @@ public class Methods {
 					privateKey = rs.getString("private_key");
 					publicKey = rs.getString("public_key");
 				} else {
-					error = "Default wallet not found";
-					result.add(error);
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, "Default wallet not found");
+					return jsonRpcObject;
 				}
 			} else {
 				Statement stmt = conn.createStatement();
@@ -448,9 +450,9 @@ public class Methods {
 					privateKey = rs.getString("private_key");
 					publicKey = rs.getString("public_key");
 				} else {
-					error = "Wallet not found your database.You must import your private key";
-					result.add(error);
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1,
+							"Wallet not found your database.You must import your private key");
+					return jsonRpcObject;
 				}
 			}
 			String query = from + "?asset=" + asset;
@@ -482,7 +484,7 @@ public class Methods {
 				if (txResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
 					tx tx = txResponse.tx;
 					if (new Long(nonce) == Long.parseLong(tx.nonce)) {
-						insertTx(conn, tx);
+						insertTx(tx);
 						JsonObject jo = new JsonObject();
 						jo.addProperty("_id", tx._id);
 						jo.addProperty("seq", tx.seq);
@@ -503,28 +505,25 @@ public class Methods {
 						jo.addProperty("type", tx.type);
 						jo.addProperty("subtype", tx.subtype);
 						result.add(jo);
-						return result;
 					}
+					jsonRpcObject.result = result;
 				} else {
-					result.add(txResponse.message);
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, txResponse.message);
 				}
 			} else {
-				error = "Not enough balance.";
-				System.err.println(error);
-				result.add(error);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "Not enough balance.");
 			}
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	private void insertTx(Connection conn, tx tx) throws SQLException {
-		String sql;
-		sql = "INSERT INTO tx (_id,seq,amount,fee,fee_asset,hash,prev_hash,nonce,_from,_to,asset,action_time,completion_time,confirm_rate,[desc],[group],status,type,subtype) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-		PreparedStatement pstmt = conn.prepareStatement(sql);
+	private void insertTx(tx tx) throws SQLException {
+		Connection con = Connect.getConnect();
+		String sql = "INSERT INTO tx (_id,seq,amount,fee,fee_asset,hash,prev_hash,nonce,_from,_to,asset,action_time,completion_time,confirm_rate,[desc],[group],status,type,subtype) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+		PreparedStatement pstmt = con.prepareStatement(sql);
 		pstmt.setString(1, tx._id); // id
 		pstmt.setInt(2, tx.seq);// seq
 		pstmt.setString(3, String.valueOf(tx.amount));
@@ -547,7 +546,8 @@ public class Methods {
 		pstmt.executeUpdate();
 	}
 
-	public JsonArray importWallet(String[] params) throws Exception {
+	public JsonRpcObject importWallet(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String error = "";
 		String sql;
 		JsonArray result = new JsonArray();
@@ -555,9 +555,10 @@ public class Methods {
 		User user = null;
 		try {
 			conn = Connect.getConnect();
-			user = getOnlyActiveUser(result, conn);
+			user = getOnlyActiveUser();
 			if (user == null) {
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			if (params != null && params.length == 1) {
 				String encodedPrivateKey = params[0];
@@ -595,18 +596,18 @@ public class Methods {
 					jo.addProperty("email", user.email);
 
 					result.add(jo);
-					return result;
+					jsonRpcObject.result = result;
 				}
 			}
 		} catch (Exception e) {
-			System.out.println(e.getMessage());
 			e.printStackTrace();
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray makeDefault(String[] params) throws Exception {
+	public JsonRpcObject makeDefault(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String error = "";
 		String sql;
 		JsonArray result = new JsonArray();
@@ -614,9 +615,10 @@ public class Methods {
 		User user = null;
 		try {
 			conn = Connect.getConnect();
-			user = getOnlyActiveUser(result, conn);
+			user = getOnlyActiveUser();
 			if (user == null) {
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			if (params != null && params.length == 1) {
 				String walletAddress = params[0];
@@ -632,28 +634,28 @@ public class Methods {
 					stmt.executeBatch();
 					error = "Wallet address [" + walletAddress + "] is defaulted.";
 					result.add(error);
+					jsonRpcObject.result = result;
 				} else {
-					error = "The wallet you want to make default is not found.";
-					// System.out.println(error);
-					result.add(error);
+					jsonRpcObject.error = new JsonRpcErrorObject(1,
+							"The wallet you want to make default is not found.");
+					return jsonRpcObject;
 				}
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray createWalletAndSave(String[] params) throws Exception {
+	public JsonRpcObject createWalletAndSave(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String aliasName = null;
 		Double limitHourly = null;
 		Double limitDaily = null;
 		Double limitMaxAmount = null;
 		String callbackUrl = null;
-		Connection conn = null;
 		try {
-			conn = Connect.getConnect();
 			if (params != null && params.length > 0) {
 				for (int i = 0; i < params.length; i++) {
 					String param = params[i];
@@ -675,7 +677,7 @@ public class Methods {
 			}
 			WalletKey walletKey = WalletKey.getWalletKeys();
 			return createAccountAndSave(aliasName, limitHourly, limitDaily, limitMaxAmount, callbackUrl, walletKey,
-					null, conn);
+					null);
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 			e.printStackTrace();
@@ -683,25 +685,25 @@ public class Methods {
 		}
 	}
 
-	private JsonArray createAccountAndSave(String aliasName, Double limitHourly, Double limitDaily,
-			Double limitMaxAmount, String callbackUrl, WalletKey walletKey, User user, Connection conn)
-			throws Exception {
+	private JsonRpcObject createAccountAndSave(String aliasName, Double limitHourly, Double limitDaily,
+			Double limitMaxAmount, String callbackUrl, WalletKey walletKey, User user) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		JsonArray result = new JsonArray();
 		Gson g = new Gson();
 		String error = "";
+		Connection conn = null;
 		try {
-			if (conn == null) {
-				conn = Connect.getConnect();
-			}
+			conn = Connect.getConnect();
 			if (user == null) {
-				user = getOnlyActiveUser(result, conn);
+				user = getOnlyActiveUser();
 				if (user == null) {
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+					return jsonRpcObject;
 				}
 			}
 			if (walletKey == null) {
-				result.add(SikkeConstant.WALLET_NOT_CREATED);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.WALLET_NOT_CREATED);
+				return jsonRpcObject;
 			}
 			long nonce = SikkeConstant.getEpochTime();
 			String nonceStr = String.valueOf(nonce);
@@ -734,7 +736,8 @@ public class Methods {
 			if (callbackUrl != null) {
 				sb.append("&w_callback_url=" + callbackUrl);
 			}
-			String response = helper.sendPost("/v1/wallet", sb.toString(), SikkeConstant.REQUEST_PUT);
+			String response = helper.sendPost("/v1/wallet", sb.toString(),
+					SikkeEnumContainer.HTTPRequestMethod.PUT.getRequest());
 			WalletResponse walletResponse = g.fromJson(response.toString(), WalletResponse.class);
 
 			if (walletResponse != null) {
@@ -742,32 +745,28 @@ public class Methods {
 					wallet wallet = walletResponse.wallet;
 					if (wallet != null) {
 						result = createWallet(wallet.alias_name, limitHourly, limitDaily, limitMaxAmount, callbackUrl,
-								walletKey, user, conn);
-						_System.isWalletCreated = true;
-						return result;
+								walletKey, user);
+						jsonRpcObject.result = result;
 					}
 				} else {
-					error = "Wallet creation failed.";
-					result.add(error);
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, "Wallet creation failed.");
 				}
+			} else {
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "Wallet creation failed.");
 			}
-			error = "Wallet creation failed.";
-			result.add(error);
-
-			return result;
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public synchronized JsonArray syncWallets(String[] params, User _user) throws Exception {
+	public synchronized JsonRpcObject syncWallets(String[] params, User _user) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		JsonArray result = new JsonArray();
 		Gson g = new Gson();
 		String sql = null;
-		String error = "";
 		StringBuilder sb = null;
 		String limitHourly = null, aliasName = null, callbackUrl = null, limitMaxAmount = null, limitDaily = null,
 				privateKey = null, nonce = null, publicKey = null, signedTx = null, address = null;
@@ -776,9 +775,10 @@ public class Methods {
 		try {
 			conn = Connect.getConnect();
 			if (_user == null) {
-				user = getOnlyActiveUser(result, conn);
+				user = getOnlyActiveUser();
 				if (user == null) {
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+					return jsonRpcObject;
 				}
 				String response = system.getAccessToken(user.email, user.getPassword());
 				User userFromAPI = g.fromJson(response.toString(), User.class);
@@ -813,19 +813,13 @@ public class Methods {
 							}
 							for (wallet wallet : walletList) {
 								byte[] passwordByte = AES256Cipher.key128Bit(user.password);
-								//TODO try catch kaldýrýlacak.
-								try {
-									String pvKey = AES256Cipher.decryptPvt(passwordByte, wallet.w_zeugma);
-									WalletKey walletKey = WalletKey.getWalletKeysFromPrivateKey(pvKey);
-									wallet.privateKey = walletKey.getPrivateKey();
-									wallet.publicKey = walletKey.getPublicKey();
-									wallet.address = walletKey.getAddress();
-									insertOrUpdateWallet(conn, wallet, user);
-
-								} catch (Exception e) {
-									System.out.println("decryptPvt : " + e.getMessage() + "\n" + wallet.address);
-									throw new Exception(e);
-								}
+								// TODO try catch kaldýrýlacak.
+								String pvKey = AES256Cipher.decryptPvt(passwordByte, wallet.w_zeugma);
+								WalletKey walletKey = WalletKey.getWalletKeysFromPrivateKey(pvKey);
+								wallet.privateKey = walletKey.getPrivateKey();
+								wallet.publicKey = walletKey.getPublicKey();
+								wallet.address = walletKey.getAddress();
+								insertOrUpdateWallet(conn, wallet, user);
 							}
 						}
 					} else {
@@ -833,7 +827,7 @@ public class Methods {
 					}
 				}
 				result.add("Number of wallets received from the API : " + numberOfWalletsIncomingFromSikkeAPI);
-				_System.isWalletCreated = true;
+				// _System.isWalletCreated = true;
 				_System.shouldThreadContinueToWork = true;
 				int numberOfWalletsOutgoingToSikkeAPI = 0;
 				sql = "SELECT w.* FROM wallets w,system_user u where u.email = w.email and u.is_user_logged_in = 1";
@@ -876,7 +870,8 @@ public class Methods {
 					if (callbackUrl != null) {
 						sb.append("&w_callback_url=" + callbackUrl);
 					}
-					String response = helper.sendPost("/v1/wallet", sb.toString(), SikkeConstant.REQUEST_PUT);
+					String response = helper.sendPost("/v1/wallet", sb.toString(),
+							SikkeEnumContainer.HTTPRequestMethod.PUT.getRequest());
 					WalletResponse walletResponse = g.fromJson(response, WalletResponse.class);
 					if (walletResponse != null) {
 						if (walletResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
@@ -891,7 +886,8 @@ public class Methods {
 					}
 				}
 				result.add("Number of wallets sent to the API : " + numberOfWalletsOutgoingToSikkeAPI);
-				return result;
+				jsonRpcObject.result = result;
+				return jsonRpcObject;
 			} else {
 				for (int i = 0; i < params.length; i++) {
 					String param = params[i];
@@ -913,9 +909,8 @@ public class Methods {
 					}
 				}
 				if (address == null) {
-					error = "Address field cannot be empty";
-					result.add(error);
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, "Address field cannot be empty");
+					return jsonRpcObject;
 				}
 				sql = "select * from wallets w, system_user u where w.address ='" + address
 						+ "' and w.email = u.email and u.is_user_logged_in = 1";
@@ -961,7 +956,8 @@ public class Methods {
 					if (callbackUrl != null) {
 						sb.append("&w_callback_url=" + callbackUrl);
 					}
-					String response = helper.sendPost("/v1/wallet", sb.toString(), SikkeConstant.REQUEST_PUT);
+					String response = helper.sendPost("/v1/wallet", sb.toString(),
+							SikkeEnumContainer.HTTPRequestMethod.PUT.getRequest());
 					WalletResponse walletResponse = g.fromJson(response, WalletResponse.class);
 
 					if (walletResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
@@ -986,16 +982,17 @@ public class Methods {
 						result.add(jo);
 					}
 				} else {
-					error = "The wallet you entered has not been found in the Sikke Node. Please check your wallet address and try again.";
-					result.add(error);
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1,
+							"The wallet you entered has not been found in the Sikke Node. Please check your wallet address and try again.");
+					return jsonRpcObject;
 				}
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
 	public synchronized List<Long> someFunc(String str) {
@@ -1019,8 +1016,8 @@ public class Methods {
 		return longList;
 	}
 
-	public JsonArray help(String[] params) {
-
+	public JsonRpcObject help(String[] params) {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		JsonArray jsonArray = new JsonArray();
 		StringBuilder sb = new StringBuilder();
 
@@ -1089,11 +1086,12 @@ public class Methods {
 				": https://github.com/sikke-official/sikke-nodes/tree/master/release/node/v.0.1.0/server"));
 		jsonArray.add(String.format("%1$-25s %2$20s", "Sikke Node Console Github",
 				": https://github.com/sikke-official/sikke-nodes/tree/master/release/node/v.0.1.0/console"));
-		return jsonArray;
+		jsonRpcObject.result = jsonArray;
+		return jsonRpcObject;
 	}
 
-	public JsonArray mergeBalance(String[] params) throws Exception {
-
+	public JsonRpcObject mergeBalance(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String error = null;
 		JsonArray result = new JsonArray();
 		Gson g = new Gson();
@@ -1108,9 +1106,10 @@ public class Methods {
 		boolean isReceiverWalletEntered = false;
 		try {
 			conn = Connect.getConnect();
-			user = getOnlyActiveUser(result, conn);
+			user = getOnlyActiveUser();
 			if (user == null) {
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			hashAddress = new HashSet<String>();
 			sql = "select * from wallets w,system_user u where u.email = w.email and u.is_user_logged_in = 1";
@@ -1140,9 +1139,8 @@ public class Methods {
 				receiverWallet.publicKey = rs.getString("public_key");
 			}
 			if (receiverWallet == null) {
-				error = "Default wallet(receiver wallet) could not found.";
-				result.add(error);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "Default wallet(receiver wallet) could not found.");
+				return jsonRpcObject;
 			}
 			String whereClausePart = "";
 			if (asset != null) {
@@ -1191,7 +1189,7 @@ public class Methods {
 				// System.err.println(response);
 				TxResponse txResponse = g.fromJson(response.toString(), TxResponse.class);
 				if (txResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-					insertTx(conn, txResponse.tx);
+					insertTx(txResponse.tx);
 					jo = new JsonObject();
 					jo.addProperty("from", senderWallet.address);
 					jo.addProperty("to", receiverWallet.address);
@@ -1226,7 +1224,7 @@ public class Methods {
 
 						response = helper.sendPost(SikkeConstant.SEND_TX, sbPostQuery.toString(), null);
 						if (txResponse.status.equals(SikkeConstant.STATUS_SUCCESS)) {
-							insertTx(conn, txResponse.tx);
+							insertTx(txResponse.tx);
 							jo = new JsonObject();
 							jo.addProperty("senderWallet", senderWallet.address);
 							jo.addProperty("receiverWallet", receiverWallet.address);
@@ -1236,23 +1234,20 @@ public class Methods {
 						} else if (txResponse.status.equals(SikkeConstant.STATUS_ERROR)) {
 							hashAddress.add(senderWallet.address);
 							continue;
-							// insertOutdatedWallet(conn, senderWallet);
 						}
 					}
 					hashAddress.add(senderWallet.address);
-					// insertOutdatedWallet(conn, senderWallet);
 				}
 			}
-			insertOutdatedWallet(conn, hashAddress);
+			jsonRpcObject.result = result;
+			insertOutdatedWallet(hashAddress);
 			stmt.close();
-			// conn.close();
 			repairTx(params);
 		} catch (Exception e) {
 			e.printStackTrace();
-			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
 	public String[] replaceSpaceAndSplit(String param) {
@@ -1260,7 +1255,8 @@ public class Methods {
 		return criterias;
 	}
 
-	public JsonArray repairTx(String[] params) throws Exception {
+	public JsonRpcObject repairTx(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		Connection conn = null;
 		String sql = null;
 		String address = null;
@@ -1270,15 +1266,18 @@ public class Methods {
 		User user = null;
 		try {
 			conn = Connect.getConnect();
-			hashAddress = new HashSet<>();
-			user = getOnlyActiveUser(result, conn);
+			user = getOnlyActiveUser();
 			if (user == null) {
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
+			hashAddress = new HashSet<>();
 			sql = "SELECT a.*, ifnull(b.maxSeqNum, 0) maxSeqNumber FROM( SELECT w.address, w.public_key, w.private_key FROM outdated_wallet o, wallets w, system_user u WHERE w.address = o.address AND u.email = w.email AND u.is_user_logged_in = 1) a LEFT JOIN ( SELECT _from, max(t.seq) AS maxSeqNum FROM tx t, system_user u, wallets w WHERE t._from = w.address AND w.email = u.email AND u.is_user_logged_in = 1 GROUP BY t._from ) b ON a.address = b._from order by maxSeqNumber desc ;";
 			Statement stmt = conn.createStatement();
 			ResultSet rs = stmt.executeQuery(sql);
+			int numberOfWalletRepaired = 0;
 			while (rs.next()) {
+				numberOfWalletRepaired++;
 				address = rs.getString("address");
 				String publicKey = rs.getString("public_key");
 				int skip = 0;
@@ -1306,7 +1305,7 @@ public class Methods {
 								skip = -1;
 							}
 							for (tx tx : txList) {
-								insertOrUpdateTx(conn, tx);
+								insertOrUpdateTx(tx);
 							}
 						}
 					} else {
@@ -1317,144 +1316,151 @@ public class Methods {
 				result.add(error);
 				hashAddress.add(address);
 			}
-			deleteOutdatedWallets(conn, hashAddress);
+			if (numberOfWalletRepaired == 0) {
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "No wallet to repair.");
+			} else {
+				jsonRpcObject.result = result;
+			}
+			deleteOutdatedWallets(hashAddress);
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 			e.printStackTrace();
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		if (address == null) {
-			error = "No wallet to repair.";
-			result.add(error);
-		}
-		return result;
+		return jsonRpcObject;
 	}
 
 	synchronized public JsonArray syncTx() throws Exception {
 		JsonArray result = new JsonArray();
-		Connection conn = null;
-		wallet wallet = null;
 		String error = null;
-		Gson g = new Gson();
-		int maxSeqNum = 0;
-
+		boolean isFirstFetch = false;
 		try {
-			conn = Connect.getConnect();
-			if (_System.hmap == null) {
-				_System.hmap = new HashMap<wallet, Integer>();
-				getWalletInfo(conn, _System.hmap);
-			} else {
-				if (_System.isWalletCreated) {
-					_System.hmap = new HashMap<wallet, Integer>();
-					getWalletInfo(conn, _System.hmap);
-					_System.isWalletCreated = false;
-				}
+			if (_System.maxSequenceNumber == 0) {
+				getMaxSequenceNumber();
 			}
-			Iterator<?> iterator = _System.hmap.entrySet().iterator();
-			while (iterator.hasNext()) {
-				int skip = 0;
-				int limit = SikkeConstant.QUERY_LIMIT;
-				int totalRecordBasedOnAddress = 0;
+			if (_System.maxSequenceNumber == 0) {
+				isFirstFetch = true;
+			}
+			System.out.println("isFirstFetch : " + isFirstFetch);
+			int skip = 0;
+			int limit = SikkeConstant.TX_QUERY_LIMIT;
+			int totalRecordBasedOnAddress = 0;
+			long start = System.currentTimeMillis();
+			Connect.getConnect().setAutoCommit(false);
+			while (skip >= 0) {
+				System.out.println("Skip Value : " + skip);
+				StringBuilder sbTx = new StringBuilder();
+				sbTx.append("seq_gt=").append(_System.maxSequenceNumber).append("&limit=").append(String.valueOf(limit))
+						/* .append("&skip=").append(String.valueOf(skip)) */.append("&sort=asc");
 
-				Map.Entry<wallet, Integer> me = (Map.Entry) iterator.next();
-				wallet = (sikke.cli.defs.wallet) me.getKey();
-				maxSeqNum = (int) me.getValue();
+				String response = helper.sendGet("/v1/tx?", sbTx.toString(), null);
+				JsonObject json = (JsonObject) new JsonParser().parse(response);
+				JsonArray jsonArray = (JsonArray) json.get("tx_items");
 
-				while (skip >= 0) {
-					StringBuilder sbTx = new StringBuilder();
-					sbTx.append("wallet=").append(wallet.address).append("&w_pub_key=").append(wallet.publicKey)
-							.append("&seq_gt=").append(maxSeqNum).append("&limit=").append(String.valueOf(limit))
-							.append("&skip=").append(String.valueOf(skip)).append("&sort=asc");
-
-					String response = helper.sendGet("/v1/tx?", sbTx.toString(), null);
-					// System.err.println(response);
-					JsonObject json = (JsonObject) new JsonParser().parse(response);
-					JsonArray jsonArray = (JsonArray) json.get("tx_items");
-
-					if (jsonArray != null && jsonArray.size() > 0) {
-						totalRecordBasedOnAddress += jsonArray.size();
-						List<tx> txList = gson.fromJson(jsonArray, new TypeToken<List<tx>>() {
-						}.getType());
-						if (txList != null) {
-							for (int i = 0; i < txList.size(); i++) {
-								tx t = txList.get(i);
-								int txSize = txList.size();
-								insertOrUpdateTx(conn, t);
-
-								if (i == txSize - 1) {
-									me.setValue(t.seq);
-								}
+				if (jsonArray != null && jsonArray.size() > 0) {
+					List<tx> txList = gson.fromJson(jsonArray, new TypeToken<List<tx>>() {
+					}.getType());
+					if (txList != null) {
+						for (int i = 0; i < txList.size(); i++) {
+							tx t = txList.get(i);
+							totalRecordBasedOnAddress++;
+							_System.maxSequenceNumber = t.seq;
+							insertOrUpdateTx(t);
+							System.out.println("Number of Records : " + totalRecordBasedOnAddress);
+						}
+						Connect.getConnect().commit();
+						if (txList.size() == limit) {
+							skip++;
+							if (isFirstFetch) {
+								long strt = System.currentTimeMillis();
+								Thread.sleep(5000);
+								long end = System.currentTimeMillis();
+								System.out.println("Time Elapsed ::::::::::::::" + (end - strt) / 1000);
 							}
-							if (txList.size() == limit) {
-								skip++;
-								continue;
-							} else {
-								error = totalRecordBasedOnAddress + " tx inserted/updated on wallet [" + wallet.address
-										+ "]";
-								result.add(error);
-								break;
-							}
+							continue;
 						} else {
+
 							break;
 						}
 					} else {
 						break;
 					}
+				} else {
+					break;
 				}
 			}
+			long end = System.currentTimeMillis();
+			System.out.println("Execution completed sn :  " + (end - start) / 1000);
+			error = totalRecordBasedOnAddress + " tx inserted/updated";
+			
+			result.add(error);
 		} catch (Exception e) {
+			logger.log(Level.FATAL, e.getMessage());
 			e.printStackTrace();
+			throw e;
+		} finally {
+			Connect.getConnect().commit();
+			Connect.getConnect().setAutoCommit(true);
 		}
 		return result;
 	}
 
-	public void getWalletInfo(Connection con, HashMap<wallet, Integer> hmap2) throws SQLException {
-		String sql;
-		wallet wallet;
-		int maxSeqNum;
-		sql = "SELECT u.email, w.*, ifnull(a.maxSeqNumber, 0) maxSeqNum FROM system_user u, wallets w LEFT JOIN( SELECT t._from, max(t.seq) AS maxSeqNumber FROM tx t GROUP BY t._from) a ON w.address = a._from WHERE u.email = w.email AND u.is_user_logged_in = 1; ";
-		Statement stmt = con.createStatement();
+	public void getMaxSequenceNumber() throws SQLException {
+		String sql = "SELECT ifnull(max(t.seq),0) AS maxSeqNum FROM tx t";
+		Statement stmt = Connect.getConnect().createStatement();
 		ResultSet rs = stmt.executeQuery(sql);
-		while (rs.next()) {
-			wallet = new wallet();
-			maxSeqNum = rs.getInt("maxSeqNum");
-			wallet.address = rs.getString("address");
-			wallet.publicKey = rs.getString("public_key");
-			_System.hmap.put(wallet, maxSeqNum);
+		if (rs.next()) {
 		}
+		_System.maxSequenceNumber = rs.getInt("maxSeqNum");
 	}
 
-	private void insertOrUpdateTx(Connection con, tx tx) throws SQLException {
-		String sql;
-		sql = "insert into tx (_id,seq,amount,fee,fee_asset,hash,prev_hash,nonce,_from,_to,asset,action_time,completion_time,confirm_rate,[desc],[group],status,type,subtype) "
-				+ "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) on conflict (_id) do update set " + "amount ='"
-				+ tx.amount +"'"+ ",fee='" + tx.fee + "'" + ",fee_asset='" + tx.fee_asset + "'" + ",hash='" + tx.hash + "'"
-				+ ",prev_hash='" + tx.prev_hash + "'" + ",nonce='" + tx.nonce + "'" + ",action_time='" + tx.action_time+"'"
-				+ ",completion_time='" + tx.complete_time +"'"+ ",_from='" + tx.wallet + "'" + ",_to='" + tx.to + "'"
-				+ ",asset='" + tx.asset + "'" + ",[group]='" + tx.group +"'"+ ",seq='" + tx.seq +"'"+ ",[desc]='" + tx.desc + "'"
-				+ ",confirm_rate='" + tx.confirm_rate +"'"+ ",status='" + tx.status +"'"+ ",type='" + tx.type+"'" + ",subtype='"
-				+ tx.subtype+"'";
-		PreparedStatement pstmt = con.prepareStatement(sql);
-		pstmt.setString(1, tx._id); // id
-		pstmt.setInt(2, tx.seq);// seq
-		pstmt.setString(3, String.valueOf(tx.amount));
-		pstmt.setString(4, tx.fee);// fee
-		pstmt.setString(5, tx.fee_asset);// fee_asset
-		pstmt.setString(6, tx.hash);// hash
-		pstmt.setString(7, tx.prev_hash);// prev_hash
-		pstmt.setString(8, tx.nonce);// nonce
-		pstmt.setString(9, tx.wallet);// from
-		pstmt.setString(10, tx.to); // to
-		pstmt.setString(11, tx.asset);// asset
-		pstmt.setString(12, String.valueOf(tx.action_time));// action time
-		pstmt.setString(13, String.valueOf(tx.complete_time));// completion_time
-		pstmt.setString(14, tx.confirm_rate);// confirmRate
-		pstmt.setString(15, tx.desc);// desc
-		pstmt.setString(16, tx.group);// group
-		pstmt.setInt(17, tx.status);// status
-		pstmt.setInt(18, tx.type);// type
-		pstmt.setInt(19, tx.subtype);// subtype
-		pstmt.executeUpdate();
+	synchronized private void insertOrUpdateTx(tx tx) throws SQLException {
+		String sql = null;
+		Connection con = null;
+		tx.desc = tx.desc == null ? "" : tx.desc;
+		tx.fee = tx.fee == null ? "" : tx.fee;
+		tx.fee_asset = tx.fee_asset == null ? "" : tx.fee_asset;
+		int checked = tx.to == null ? 0 : 1;
+		tx.to = tx.to == null ? "" : tx.to;
+		try {
+			con = Connect.getConnect();
+			sql = "insert into tx (_id,seq,amount,fee,fee_asset,hash,prev_hash,nonce,_from,_to,asset,action_time,completion_time,confirm_rate,[desc],[group],status,type,subtype,checked) "
+					+ "values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) on conflict (_id) do update set " + "amount ='"
+					+ tx.amount + "'" + ",fee='" + tx.fee + "'" + ",fee_asset='" + tx.fee_asset + "'" + ",hash='"
+					+ tx.hash + "'" + ",prev_hash='" + tx.prev_hash + "'" + ",nonce='" + tx.nonce + "'"
+					+ ",action_time='" + tx.action_time + "'" + ",completion_time='" + tx.complete_time + "'"
+					+ ",_from='" + tx.wallet + "'" + ",_to='" + tx.to + "'" + ",asset='" + tx.asset + "'" + ",[group]='"
+					+ tx.group + "'" + ",seq=" + tx.seq + ",[desc]='" + tx.desc.replace("'", "''") + "'"
+					+ ",confirm_rate='" + tx.confirm_rate + "'" + ",status=" + tx.status + ",type=" + tx.type
+					+ ",subtype=" + tx.subtype + ",checked=" + checked;
+			PreparedStatement pstmt = con.prepareStatement(sql);
+			pstmt.setString(1, tx._id); // id
+			pstmt.setInt(2, tx.seq);// seq
+			pstmt.setString(3, String.valueOf(tx.amount));
+			pstmt.setString(4, tx.fee);// fee
+			pstmt.setString(5, tx.fee_asset);// fee_asset
+			pstmt.setString(6, tx.hash);// hash
+			pstmt.setString(7, tx.prev_hash);// prev_hash
+			pstmt.setString(8, tx.nonce);// nonce
+			pstmt.setString(9, tx.wallet);// from
+			pstmt.setString(10, tx.to); // to
+			pstmt.setString(11, tx.asset);// asset
+			pstmt.setString(12, tx.action_time);// action time
+			pstmt.setString(13, tx.complete_time);// completion_time
+			pstmt.setString(14, tx.confirm_rate);// confirmRate
+			pstmt.setString(15, tx.desc);// desc
+			pstmt.setString(16, tx.group);// group
+			pstmt.setInt(17, tx.status);// status
+			pstmt.setInt(18, tx.type);// type
+			pstmt.setInt(19, tx.subtype);// subtype
+			pstmt.setInt(20, checked);// checked
+			pstmt.executeUpdate();
+		} catch (Exception e) {
+
+			e.printStackTrace();
+			logger.error("Tx Upsert Error : \n\n\tSql : " + sql + "\n\n\t Tx Object : " + tx.toString()
+					+ "\n\n\t Stacktrace : " + e.getStackTrace() + "\n\n\t Message : " + e.getMessage());
+		}
 	}
 
 	private void insertOrUpdateWallet(Connection con, wallet wallet, User user) throws SQLException {
@@ -1467,7 +1473,7 @@ public class Methods {
 				+ "values (?,?,?,?,?,?,?,?,?,?,?) on conflict (address) do update set " + "label='" + wallet.alias_name
 				+ "'" + ",private_key='" + wallet.privateKey + "'" + ",public_key='" + wallet.publicKey + "'"
 				+ ",limit_hourly='" + strLimitHourly + "'" + ",limit_daily='" + strLimitDaily + "'" + ",callback_url='"
-				+ wallet.callback_url +"'" +",contract_token='" + wallet.contract_token+"'" + ",limit_max_amount='"
+				+ wallet.callback_url + "'" + ",contract_token='" + wallet.contract_token + "'" + ",limit_max_amount='"
 				+ strLimitMaxAmount + "'";
 		PreparedStatement pstmt = con.prepareStatement(sql);
 		pstmt.setString(1, wallet.address); // address
@@ -1484,7 +1490,8 @@ public class Methods {
 		pstmt.executeUpdate();
 	}
 
-	private void deleteOutdatedWallets(Connection con, HashSet<String> addresses) throws Exception {
+	private void deleteOutdatedWallets(HashSet<String> addresses) throws Exception {
+		Connection con = Connect.getConnect();
 		Statement statement = con.createStatement();
 		for (String address : addresses) {
 			String query = "delete from outdated_wallet where address='" + address + "'";
@@ -1494,7 +1501,8 @@ public class Methods {
 		statement.close();
 	}
 
-	private void insertOutdatedWallet(Connection conn, HashSet<String> addresses) throws SQLException {
+	private void insertOutdatedWallet(HashSet<String> addresses) throws SQLException {
+		Connection conn = Connect.getConnect();
 		Statement statement = conn.createStatement();
 		for (String address : addresses) {
 			String query = "insert or ignore into outdated_wallet (address) values('" + address + "')";
@@ -1510,22 +1518,22 @@ public class Methods {
 		return ja;
 	}
 
-	public JsonArray logout(String[] params) throws Exception {
-		Connection conn = null;
+	public JsonRpcObject logout(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		JsonArray result = new JsonArray();
 		try {
-			// conn = this.connect();
-			conn = Connect.getConnect();
-			system.disableAllUserLoginStatus(conn);
+			system.disableAllUserLoginStatus();
 			_System.shouldThreadContinueToWork = false;
 			result.add(SikkeConstant.LOGOUT_PERFORMED);
+			jsonRpcObject.result = result;
 		} catch (Exception e) {
 			throw new Exception(e);
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray login(String[] params) throws Exception {
+	public JsonRpcObject login(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		String username = null;
 		String password = null;
 		Connection conn = null;
@@ -1552,20 +1560,20 @@ public class Methods {
 						}
 					}
 				} else {
-					result.add(SikkeConstant.INCORRECT_PARAMETER_SET);
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.INCORRECT_PARAMETER_SET);
+					return jsonRpcObject;
 				}
 			}
 			if (username == null) {
-				result.add(SikkeConstant.USER_REQUIRED);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.USER_REQUIRED);
+				return jsonRpcObject;
 			}
 			if (password == null) {
-				result.add(SikkeConstant.PASSWORD_COULD_NOT_FOUND);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.PASSWORD_COULD_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			conn = Connect.getConnect();
-			system.getActiveUsers(conn, userList);
+			system.getActiveUsers(userList);
 			if (userList.size() == 0) {
 				String response = system.getAccessToken(username, password);
 				userFromService = g.fromJson(response.toString(), User.class);
@@ -1582,11 +1590,12 @@ public class Methods {
 					isUserSuccessfullyLoggedIn = true;
 					system.saveOrUpdateUser(conn, user);
 					result.add(SikkeConstant.YOU_HAVE_LOGGED_IN_SUCCESSFULLY);
+					jsonRpcObject.result = result;
 				} else {
-					result.add(SikkeConstant.USER_COULD_NOT_FOUND);
 					_System.shouldThreadContinueToWork = true;
-					system.disableAllUserLoginStatus(conn);
-					return result;
+					system.disableAllUserLoginStatus();
+					jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.USER_COULD_NOT_FOUND);
+					return jsonRpcObject;
 				}
 			} else if (userList.size() == 1) {
 				user = userList.get(0);
@@ -1603,19 +1612,20 @@ public class Methods {
 						isUserSuccessfullyLoggedIn = true;
 						_System.shouldThreadContinueToWork = true;
 						result.add(SikkeConstant.YOU_HAVE_ALREADY_LOGGED_IN);
+						jsonRpcObject.result = result;
 					} else {
-						result.add(SikkeConstant.USER_COULD_NOT_FOUND);
 						_System.shouldThreadContinueToWork = false;
-						system.disableAllUserLoginStatus(conn);
-						return result;
+						system.disableAllUserLoginStatus();
+						jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.USER_COULD_NOT_FOUND);
+						return jsonRpcObject;
 					}
 				} else {
-					result.add(SikkeConstant.ANOTHER_USER_HAVE_ALREADY_LOGGED_IN);
 					_System.shouldThreadContinueToWork = true;
-					return result;
+					jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.ANOTHER_USER_HAVE_ALREADY_LOGGED_IN);
+					return jsonRpcObject;
 				}
 			} else if (userList.size() > 1) {
-				system.disableAllUserLoginStatus(conn);
+				system.disableAllUserLoginStatus();
 				String response = system.getAccessToken(username, password);
 				userFromService = g.fromJson(response.toString(), User.class);
 				if (userFromService.status.equals(SikkeConstant.STATUS_SUCCESS)) {
@@ -1642,12 +1652,14 @@ public class Methods {
 				t.start();
 			}
 		} catch (Exception e) {
-			throw new Exception(e);
+			e.printStackTrace();
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray register(String[] params) throws Exception {
+	public JsonRpcObject register(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		JsonArray result = new JsonArray();
 		Connection conn = null;
 		User user = null;
@@ -1670,32 +1682,32 @@ public class Methods {
 				}
 			}
 			if (username == null) {
-				result.add(SikkeConstant.USERNAME_CANNOT_BE_EMPTY);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.USERNAME_CANNOT_BE_EMPTY);
+				return jsonRpcObject;
 			}
 			if (password == null) {
-				result.add(SikkeConstant.PASSWORD_CANNOT_BE_EMPTY);
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.PASSWORD_CANNOT_BE_EMPTY);
+				return jsonRpcObject;
 			}
-			// conn = this.connect();
 			conn = Connect.getConnect();
 			user = getUserByEmail(username, conn);
 			if (user != null) {
 				if (user.is_user_logged_in) {
-					result.add(SikkeConstant.YOU_HAVE_ALREADY_LOGGED_IN);
+					jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.YOU_HAVE_ALREADY_LOGGED_IN);
 				} else {
-					User activeUser = getOnlyActiveUser(result, conn);
+					User activeUser = getOnlyActiveUser();
 					result = new JsonArray();
 					if (activeUser != null) {
 						if (!activeUser.email.equals(user.email)) {
-							result.add(SikkeConstant.ANOTHER_USER_HAVE_ALREADY_LOGGED_IN);
+							jsonRpcObject.error = new JsonRpcErrorObject(1,
+									SikkeConstant.ANOTHER_USER_HAVE_ALREADY_LOGGED_IN);
 						}
 					} else {
-						result.add(
+						jsonRpcObject.error = new JsonRpcErrorObject(1,
 								SikkeConstant.YOU_HAVE_ALREADY_REGISTERED_YOU_MUST_LOGIN_TO_OPERATE_YOUR_WALLET_OPERATION);
 					}
 				}
-				return result;
+				return jsonRpcObject;
 			} else {
 				sbPostQuery.append("email=").append(username).append("&password=").append(password)
 						.append("&password_confirm=").append(password);
@@ -1717,11 +1729,10 @@ public class Methods {
 								SikkeConstant.YOU_HAVE_SUCCESSFULLY_REGISTERED_YOU_MUST_BE_LOGGED_IN_TO_USE_THE_SYSTEM);
 
 						WalletKey walletKey = WalletKey.getWalletKeys();
-						return createAccountAndSave(null, null, null, null, null, walletKey,
-								user, conn);
+						return createAccountAndSave(null, null, null, null, null, walletKey, user);
 					} else {
-						result.add(userResponse.message);
-						return result;
+						jsonRpcObject.error = new JsonRpcErrorObject(1, userResponse.message);
+						return jsonRpcObject;
 					}
 				}
 			}
@@ -1729,13 +1740,13 @@ public class Methods {
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
 			e.printStackTrace();
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray exportWallets(String[] params) throws Exception {
-
+	public JsonRpcObject exportWallets(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		Connection conn = null;
 		String sql = null;
 		User user = null;
@@ -1743,11 +1754,11 @@ public class Methods {
 		JsonObject jsonObject = new JsonObject();
 		FileWriter fileWriter = null;
 		try {
-			// conn = this.connect();
 			conn = Connect.getConnect();
-			user = getOnlyActiveUser(result, conn);
+			user = getOnlyActiveUser();
 			if (user == null) {
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			sql = "select w.address,w.public_key,w.private_key from wallets w, system_user u where  w.email = u.email and u.is_user_logged_in = 1;";
 			Statement stmt = conn.createStatement();
@@ -1767,35 +1778,35 @@ public class Methods {
 			String file = path + SikkeConstant.FILE_NAME;
 			fileWriter = new FileWriter(file);
 			fileWriter.write(jsonObject.toString());
+
 			result.add(numberOfWallet
 					+ " wallets have been exported. Your exported wallets are written to the file \"wallets.skk\" at "
 					+ path);
+			jsonRpcObject.result = result;
 		} catch (Exception e) {
 			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		} finally {
 			if (fileWriter != null) {
 				fileWriter.close();
 			}
-			/*
-			 * if (conn != null) { conn.close(); }
-			 */
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray importWallets(String[] params) throws Exception {
+	public JsonRpcObject importWallets(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		Connection conn = null;
 		User user = null;
 		JsonArray result = new JsonArray();
 		Gson gson = new Gson();
 		FileReader fileReader = null;
 		try {
-			// conn = this.connect();
 			conn = Connect.getConnect();
-			user = getOnlyActiveUser(result, conn);
+			user = getOnlyActiveUser();
 			if (user == null) {
-				return result;
+				jsonRpcObject.error = new JsonRpcErrorObject(1, SikkeConstant.LOGGED_IN_USER_NOT_FOUND);
+				return jsonRpcObject;
 			}
 			String path = new File(".").getCanonicalPath() + File.separator;
 			String file = path + SikkeConstant.FILE_NAME;
@@ -1822,26 +1833,29 @@ public class Methods {
 					}
 					result.add(walletList.size()
 							+ " wallets were successfully imported from the \"wallets.skk\" file at " + path);
-					_System.isWalletCreated = true;
+					jsonRpcObject.result = result;
+					// _System.isWalletCreated = true;
 				} else {
-					result.add("No wallet to import in file. Please check the file and try again.");
+					jsonRpcObject.error = new JsonRpcErrorObject(1,
+							"No wallet to import in file. Please check the file and try again.");
 				}
 			} else {
-				result.add("The file to import is not found" + path
+				jsonRpcObject.error = new JsonRpcErrorObject(1, "The file to import is not found" + path
 						+ " Please make sure the file to be imported is in the same directory as the jar file and try again.");
 			}
 		} catch (Exception e) {
 			System.out.println(e);
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		} finally {
 			if (fileReader != null) {
 				fileReader.close();
 			}
 		}
-		return result;
+		return jsonRpcObject;
 	}
 
-	public JsonArray getTransactions(String[] params) throws Exception {
+	public JsonRpcObject getTransactions(String[] params) throws Exception {
+		JsonRpcObject jsonRpcObject = new JsonRpcObject();
 		JsonArray result = new JsonArray();
 		StringBuilder sbGetTxQuery = new StringBuilder();
 		int skip = 0, limit = 100;
@@ -1914,17 +1928,17 @@ public class Methods {
 			String strResult = new Helpers().sendGet(SikkeConstant.GET_TX, txQuery, null);
 			JsonObject json = (JsonObject) new JsonParser().parse(strResult);
 			result.add(json);
-			return result;
-
+			jsonRpcObject.result = result;
 		} catch (SQLException e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(e.getMessage());
-			throw new Exception(e);
+			jsonRpcObject.error = new JsonRpcErrorObject(1, e.getMessage());
 		}
+		return jsonRpcObject;
 	}
 
 	class OneShotTask implements Runnable {
@@ -1940,6 +1954,48 @@ public class Methods {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
+		}
+	}
+
+	public void getHiddenTx() {
+		Connection con = null;
+		String address = null;
+		String txGroup = null;
+		String txId = null;
+		String publicKey = null;
+
+		String sql = "SELECT * FROM tx t, wallets w, system_user u WHERE t._from = w.address AND t.checked = 0 AND w.email = u.email AND u.is_user_logged_in = 1";
+		try {
+			con = Connect.getConnect();
+			Statement stmt = con.createStatement();
+			ResultSet rs = stmt.executeQuery(sql);
+			while (rs.next()) {
+				address = rs.getString("address");
+				txGroup = rs.getString("group");
+				txId = rs.getString("_id");
+				publicKey = rs.getString("public_key");
+
+				StringBuilder sbTx = new StringBuilder();
+				sbTx.append("w_pub_key=").append(publicKey).append("&wallet=").append(address).append("&group=")
+						.append(txGroup);
+
+				String response = helper.sendGet("/v1/tx?", sbTx.toString(), null);
+				JsonObject json = (JsonObject) new JsonParser().parse(response);
+				JsonArray jsonArray = (JsonArray) json.get("tx_items");
+
+				if (jsonArray != null && jsonArray.size() > 0) {
+					List<tx> txList = gson.fromJson(jsonArray, new TypeToken<List<tx>>() {
+					}.getType());
+					if (txList != null) {
+						for (int i = 0; i < txList.size(); i++) {
+							tx t = txList.get(i);
+							insertOrUpdateTx(t);
+						}
+					}
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 }
